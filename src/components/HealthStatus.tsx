@@ -82,56 +82,56 @@ export function HealthStatus() {
       const res = await fetch('/api/escalation-webhook-demo', { cache: 'no-store' });
       const data = (await res.json()) as { ok?: boolean; count?: number; error?: string };
       if (res.ok && data.ok) {
-        setDemoState('ok');
-        setDemoDetail(`${data.count ?? 0} rows`);
-      } else {
-        setDemoState('error');
-        setDemoDetail(data.error ?? String(res.status));
-      }
-    } catch {
-      setDemoState('error');
-      setDemoDetail('network');
-    }
-  }, []);
+              setDemoState('ok');
+              setDemoDetail(`${data.count ?? 0} rows`);
+            } else {
+              setDemoState('error');
+              setDemoDetail(data.error ?? String(res.status));
+            }
+          } catch {
+            setDemoState('error');
+            setDemoDetail('network');
+          }
+        }, []);
 
-  useEffect(() => {
-    if (monitorOpen && demoState === 'idle') {
-      void runDemoRead();
-    }
-  }, [monitorOpen, demoState, runDemoRead]);
+        useEffect(() => {
+          if (monitorOpen && demoState === 'idle') {
+            void runDemoRead();
+          }
+        }, [monitorOpen, demoState, runDemoRead]);
 
-  const runScan = useCallback(async () => {
-    const trimmed = secret.trim();
-    if (!trimmed) {
-      setScanError('Paste the same secret as ElevenLabs uses (header x-elevenlabs-secret-dentalpro).');
-      return;
-    }
-    setScanLoading(true);
-    setScanError('');
-    try {
-      try {
-        sessionStorage.setItem(STORAGE_KEY, trimmed);
-      } catch {
-        /* ignore */
-      }
-      const res = await fetch('/api/health-scan', {
-        cache: 'no-store',
-        headers: { [ELEVEN_HEADER]: trimmed }
-      });
-      const data = (await res.json()) as ScanResponse & { error?: string; reason?: string };
-      if (!res.ok) {
-        setScan(null);
-        setScanError(data.error ?? data.reason ?? `HTTP ${res.status}`);
-        return;
-      }
-      setScan(data);
-    } catch {
-      setScan(null);
-      setScanError('Network error');
-    } finally {
-      setScanLoading(false);
-    }
-  }, [secret]);
+        const runScan = useCallback(async () => {
+          const trimmed = secret.trim();
+          if (!trimmed) {
+            setScanError('Paste the same secret as ElevenLabs uses (header x-elevenlabs-secret-dentalpro).');
+            return;
+          }
+          setScanLoading(true);
+          setScanError('');
+          try {
+            try {
+              sessionStorage.setItem(STORAGE_KEY, trimmed);
+            } catch {
+              /* ignore */
+            }
+            const res = await fetch('/api/health-scan', {
+              cache: 'no-store',
+              headers: { [ELEVEN_HEADER]: trimmed }
+            });
+            const data = (await res.json()) as ScanResponse & { error?: string; reason?: string };
+            if (!res.ok) {
+              setScan(null);
+              setScanError(data.error ?? data.reason ?? `HTTP ${res.status}`);
+              return;
+            }
+            setScan(data);
+          } catch {
+            setScan(null);
+            setScanError('Network error');
+          } finally {
+            setScanLoading(false);
+          }
+        }, [secret]);
 
   const summaryDotClass = (() => {
     if (scan) {
@@ -195,12 +195,12 @@ export function HealthStatus() {
             {publicState === 'loading' && 'Checking /api/health…'}
             {publicState === 'ok' && (
               <>
-                Public health <span style={{ color: 'var(--muted)' }}>({publicDetail})</span>
+                Public health <span style={{ color: 'var(--win-muted)' }}>({publicDetail})</span>
               </>
             )}
             {publicState === 'error' && (
               <>
-                /api/health failed <span style={{ color: 'var(--muted)' }}>({publicDetail})</span>
+                /api/health failed <span style={{ color: 'var(--win-muted)' }}>({publicDetail})</span>
               </>
             )}
           </span>
@@ -217,15 +217,15 @@ export function HealthStatus() {
           <span>
             {demoState === 'idle' || demoState === 'loading'
               ? 'Loading demo escalations sheet (GET)…'
-              : demoState === 'ok'
+              :                   demoState === 'ok'
                 ? (
                     <>
-                      Escalations demo read OK <span style={{ color: 'var(--muted)' }}>({demoDetail})</span>
+                      Escalations demo read OK <span style={{ color: 'var(--win-muted)' }}>({demoDetail})</span>
                     </>
                   )
                 : (
                     <>
-                      Escalations demo failed <span style={{ color: 'var(--muted)' }}>({demoDetail})</span>
+                      Escalations demo failed <span style={{ color: 'var(--win-muted)' }}>({demoDetail})</span>
                     </>
                   )}
           </span>
@@ -277,7 +277,7 @@ export function HealthStatus() {
               {scan.summary.degraded > 0 ? ` · ${scan.summary.degraded} degraded` : ''}
               {scan.summary.down > 0 ? ` · ${scan.summary.down} down` : ''}
               {scan.summary.skipped > 0 ? ` · ${scan.summary.skipped} skipped` : ''}
-              <span style={{ color: 'var(--muted)' }}> · {new Date(scan.scannedAt).toLocaleString()}</span>
+              <span style={{ color: 'var(--win-muted)' }}> · {new Date(scan.scannedAt).toLocaleString()}</span>
             </p>
             <ul className="health-scan-list">
               {scan.endpoints.map((s) => (
