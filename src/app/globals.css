@@ -1,0 +1,374 @@
+:root {
+  --bg: #0c0f12;
+  --bg-elevated: #141a21;
+  --border: #243040;
+  --text: #e6e9ef;
+  --muted: #8b98a8;
+  --accent: #d9733a;
+  --accent-dim: #a85a2e;
+  --ok: #3d9a6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+main {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+}
+
+.hero {
+  margin-bottom: 3rem;
+}
+
+.hero h1 {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.panel h2 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 12px rgba(61, 154, 107, 0.45);
+}
+
+.status-dot.err {
+  background: #c44;
+}
+
+.status-dot.warn {
+  background: #c9a227;
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.4);
+}
+
+.health-monitor {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  padding: 0;
+  margin-top: 1rem;
+}
+
+.health-monitor-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.health-monitor-summary::-webkit-details-marker {
+  display: none;
+}
+
+.health-monitor-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 8rem;
+}
+
+.health-monitor-summary-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.health-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 2px;
+  min-width: 120px;
+  flex: 1;
+  max-width: 280px;
+  background: var(--border);
+}
+
+.health-bar--inline {
+  max-width: 200px;
+  height: 5px;
+}
+
+.health-seg {
+  min-width: 4px;
+  border-radius: 2px;
+}
+
+.health-seg--up {
+  background: var(--ok);
+}
+
+.health-seg--degraded {
+  background: #c9a227;
+}
+
+.health-seg--down {
+  background: #c44;
+}
+
+.health-seg--skipped {
+  background: #4a5568;
+}
+
+.health-monitor-body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.health-monitor-row {
+  padding-top: 0.75rem;
+}
+
+.health-scan-intro {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 1rem 0 0.75rem;
+}
+
+.health-scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.health-scan-secret {
+  flex: 1;
+  min-width: 12rem;
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.health-scan-run {
+  flex-shrink: 0;
+}
+
+.health-scan-error {
+  color: #e88;
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0;
+}
+
+.health-scan-meta {
+  font-size: 0.8rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.health-scan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.health-scan-list li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  gap: 0.5rem 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+
+.health-scan-list li:last-child {
+  border-bottom: none;
+}
+
+.health-seg-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+
+.health-scan-path {
+  font-family: ui-monospace, monospace;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.health-scan-ms {
+  color: var(--muted);
+  justify-self: end;
+}
+
+.health-scan-detail {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.health-scan-notes {
+  margin-top: 0.75rem;
+  padding-left: 1.1rem;
+}
+
+button.refresh {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.refresh:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.endpoints {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.endpoints li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 0.85rem;
+}
+
+.endpoints li:last-child {
+  border-bottom: none;
+}
+
+.method {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  width: 2.75rem;
+  text-align: center;
+}
+
+.method.get {
+  background: #1e3a5f;
+  color: #8ec5ff;
+}
+
+.method.post {
+  background: #3a2e1e;
+  color: #ffc48e;
+}
+
+.env-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.env-table th,
+.env-table td {
+  text-align: left;
+  padding: 0.5rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.env-table th {
+  color: var(--muted);
+  font-weight: 500;
+  width: 42%;
+}
+
+.env-table code {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.note {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-top: 1rem;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
