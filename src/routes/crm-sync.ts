@@ -163,7 +163,7 @@ export async function runHubspotEmergencyCallSync(
     const due = now + 24 * 60 * 60 * 1000;
     const task = await createCallbackTask(cfg.token, {
       hs_task_subject: `Callback: ${payload.callId}`,
-      hs_task_body: `Plumbing callback pending.\nCaller: ${payload.name ?? 'unknown'}\nPhone: ${payload.phone ?? 'n/a'}\nIssue: ${payload.issueSummary}`,
+      hs_task_body: `Callback pending.\nCaller: ${payload.name ?? 'unknown'}\nPhone: ${payload.phone ?? 'n/a'}\nIssue: ${payload.issueSummary}`,
       hs_timestamp: String(due),
       hubspot_owner_id: cfg.ownerId
     });

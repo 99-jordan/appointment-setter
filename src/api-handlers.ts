@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { getDefaultCompanyId, mergeDefaultCompanyId } from './clinic-default.js';
 import { appendAppointmentRow, appendCallLog, loadSheetData } from './googleSheets.js';
-import { createServiceAppointmentEvent, isGoogleCalendarConfigured } from './googleCalendar.js';
 import { config } from './config.js';
 import type { EmergencyCallPayload } from './crm/hubspot-types.js';
 import { postEscalationWebhook } from './escalation.js';
@@ -9,7 +8,6 @@ import { runHubspotEmergencyCallSync } from './routes/crm-sync.js';
 import { isTwilioConfigured, renderSmsTemplate, sendSmsViaTwilio } from './sms.js';
 import {
   assertCompanyExists,
-  bookAppointmentCanonicalSchema,
   buildCompanyContext,
   buildIntakeFlow,
   buildRulesApplicable,
@@ -21,12 +19,14 @@ import {
 } from './logic.js';
 import {
   generateCallId,
-  normalizeBookAppointmentInput,
   normalizeEscalateHumanInput,
   normalizeLogCallInput,
   normalizeSendSmsInput
 } from './tool-payload-normalize.js';
 import { parseCanonical } from './tool-validation.js';
+import { resolveSlot, parseIsoSlot, TIMEZONE } from './lib/date-parse.js';
+import { checkAvailability, createBooking, isCalendarConfigured } from './lib/calendar-service.js';
+import { HttpValidationError } from './http-validation-error.js';
 
 const crmSyncPayloadSchema = z.object({
   companyId: z.string().optional(),
@@ -200,7 +200,7 @@ export async function handleLogCall(body: unknown) {
     new Date().toISOString(),
     parsed.companyId,
     parsed.callId,
-    parsed.intent ?? 'plumbing_enquiry',
+    parsed.intent ?? 'dental_enquiry',
     parsed.priority ?? 'P3',
     parsed.emergencyFlag,
     parsed.name ?? '',
@@ -217,68 +217,185 @@ export async function handleLogCall(body: unknown) {
   return { ok: true, callId: parsed.callId };
 }
 
-export async function handleBookAppointment(body: unknown) {
-  const data = await loadSheetData();
-  const normalized = mergeDefaultCompanyId(data, normalizeBookAppointmentInput(body));
-  const parsed = parseCanonical(bookAppointmentCanonicalSchema, normalized);
+// ── check-availability ───────────────────────────────────────────────────────
 
-  const row: string[] = [
-    new Date().toISOString(),
-    parsed.companyId,
-    parsed.callId,
-    parsed.name ?? '',
-    parsed.phone,
-    parsed.email ?? '',
-    parsed.postcode ?? '',
-    parsed.serviceCategory ?? '',
-    parsed.serviceType ?? '',
-    parsed.preferredDate ?? '',
-    parsed.preferredTimeWindow ?? '',
-    parsed.notes ?? '',
-    parsed.source ?? ''
-  ];
+const checkAvailabilitySchema = z.object({
+  preferredDate: z.string().optional(),
+  preferredTime: z.string().optional(),
+  service: z.string().optional(),
+  callerName: z.string().optional(),
+  notes: z.string().optional(),
+  companyId: z.string().optional(),
+  durationMinutes: z.coerce.number().int().min(10).max(480).optional()
+});
 
-  await appendAppointmentRow(row);
+const DEFAULT_DURATION_MINUTES = 60;
 
-  type CalendarPayload =
-    | { status: 'created'; eventId: string; htmlLink: string | null }
-    | { status: 'skipped'; reason: string }
-    | { status: 'error'; message: string };
+export async function handleCheckAvailability(body: unknown) {
+  const parsed = checkAvailabilitySchema.parse(body);
+  const duration = parsed.durationMinutes ?? DEFAULT_DURATION_MINUTES;
 
-  let calendar: CalendarPayload;
-
-  try {
-    if (!isGoogleCalendarConfigured()) {
-      calendar = { status: 'skipped', reason: 'calendar_not_configured' };
-    } else if (!parsed.preferredDate?.trim()) {
-      calendar = { status: 'skipped', reason: 'no_preferred_date' };
-    } else {
-      const ev = await createServiceAppointmentEvent({
-        callId: parsed.callId,
-        companyId: parsed.companyId,
-        name: parsed.name ?? '',
-        phone: parsed.phone,
-        email: parsed.email ?? '',
-        postcode: parsed.postcode ?? '',
-        serviceCategory: parsed.serviceCategory ?? '',
-        serviceType: parsed.serviceType ?? '',
-        preferredDate: parsed.preferredDate ?? '',
-        preferredTimeWindow: parsed.preferredTimeWindow ?? '',
-        notes: parsed.notes ?? '',
-        source: parsed.source ?? ''
-      });
-      if (ev) {
-        calendar = { status: 'created', eventId: ev.eventId, htmlLink: ev.htmlLink };
-      } else {
-        calendar = { status: 'skipped', reason: 'invalid_preferred_date' };
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    calendar = { status: 'error', message };
+  if (!isCalendarConfigured()) {
+    throw Object.assign(
+      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
+      { statusCode: 503 }
+    );
   }
 
-  return { ok: true, callId: parsed.callId, calendar };
+  const resolved = resolveSlot(parsed.preferredDate, parsed.preferredTime, duration);
+
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      reason: resolved.reason,
+      message: resolved.message
+    };
+  }
+
+  const { slot } = resolved;
+  const availability = await checkAvailability(slot.startDate, slot.endDate, duration);
+
+  if (availability.status === 'calendar_not_configured') {
+    throw Object.assign(
+      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
+      { statusCode: 503 }
+    );
+  }
+
+  return {
+    ok: true,
+    request: {
+      preferredDate: parsed.preferredDate ?? null,
+      preferredTime: parsed.preferredTime ?? null,
+      service: parsed.service ?? null,
+      timezone: TIMEZONE
+    },
+    resolved: {
+      slotStart: slot.slotStart,
+      slotEnd: slot.slotEnd,
+      label: slot.label,
+      durationMinutes: duration
+    },
+    availability: {
+      status: availability.status
+    },
+    alternatives: availability.status === 'unavailable' ? availability.alternatives : []
+  };
+}
+
+// ── book-appointment ─────────────────────────────────────────────────────────
+
+const bookAppointmentSchema = z.object({
+  patientName: z.string().min(1, 'patientName is required'),
+  phone: z.string().min(5, 'phone is required (min 5 chars)'),
+  email: z.string().optional(),
+  service: z.string().optional(),
+  slotStart: z.string().optional(),
+  slotEnd: z.string().optional(),
+  preferredDate: z.string().optional(),
+  preferredTime: z.string().optional(),
+  existingPatient: z.union([z.boolean(), z.string()]).optional(),
+  notes: z.string().optional(),
+  consentToSms: z.union([z.boolean(), z.string()]).optional(),
+  companyId: z.string().optional(),
+  durationMinutes: z.coerce.number().int().min(10).max(480).optional()
+});
+
+function sanitiseBoolField(v: unknown): boolean | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (s === 'true' || s === 'yes' || s === '1') return true;
+  if (s === 'false' || s === 'no' || s === '0') return false;
+  return undefined;
+}
+
+export async function handleBookAppointment(body: unknown) {
+  const raw = bookAppointmentSchema.parse(body);
+  const duration = raw.durationMinutes ?? DEFAULT_DURATION_MINUTES;
+
+  if (!isCalendarConfigured()) {
+    throw Object.assign(
+      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
+      { statusCode: 503 }
+    );
+  }
+
+  // Resolve the slot: trust explicit slotStart/slotEnd if provided
+  let slotStartDate: Date;
+  let slotEndDate: Date;
+
+  if (raw.slotStart && raw.slotEnd) {
+    const parsed = parseIsoSlot(raw.slotStart, raw.slotEnd);
+    if (!parsed.ok) {
+      throw new HttpValidationError({ slotStart: parsed.message });
+    }
+    slotStartDate = parsed.slot.startDate;
+    slotEndDate = parsed.slot.endDate;
+  } else {
+    const resolved = resolveSlot(raw.preferredDate, raw.preferredTime, duration);
+    if (!resolved.ok) {
+      throw new HttpValidationError({
+        preferredDate: resolved.message
+      });
+    }
+    slotStartDate = resolved.slot.startDate;
+    slotEndDate = resolved.slot.endDate;
+  }
+
+  // Resolve companyId
+  const data = await loadSheetData();
+  const companyId = raw.companyId?.trim() || getDefaultCompanyId(data);
+
+  const callId = generateCallId();
+
+  // Sanitise fields that may receive garbage from LLM tool mapping
+  const existingPatient = sanitiseBoolField(raw.existingPatient);
+  const consentToSms = sanitiseBoolField(raw.consentToSms);
+
+  // Book the calendar event
+  const booking = await createBooking({
+    slotStart: slotStartDate,
+    slotEnd: slotEndDate,
+    patientName: raw.patientName,
+    phone: raw.phone,
+    email: raw.email?.trim() || undefined,
+    service: raw.service?.trim() || 'Appointment',
+    notes: [
+      raw.notes ?? '',
+      existingPatient !== undefined ? `Existing patient: ${existingPatient ? 'yes' : 'no'}` : '',
+      consentToSms !== undefined ? `SMS consent: ${consentToSms ? 'yes' : 'no'}` : ''
+    ].filter(Boolean).join('\n'),
+    companyId,
+    callId
+  });
+
+  // Also persist to Sheets as backup
+  try {
+    await appendAppointmentRow([
+      new Date().toISOString(),
+      companyId,
+      callId,
+      raw.patientName,
+      raw.phone,
+      raw.email ?? '',
+      '',
+      '',
+      raw.service ?? '',
+      booking.slotStart,
+      booking.slotEnd,
+      raw.notes ?? '',
+      'voice_agent'
+    ]);
+  } catch {
+    // Sheet write is best-effort; calendar event is the source of truth
+  }
+
+  return {
+    ok: true,
+    callId,
+    booking
+  };
 }
 
 export async function handleCrmSync(body: unknown) {

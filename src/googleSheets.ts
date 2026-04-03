@@ -111,9 +111,6 @@ export async function loadSheetData(): Promise<SheetData> {
   return data;
 }
 
-export function invalidateSheetDataCache(): void {
-  sheetCache = null;
-}
 
 export async function appendCallLog(row: string[]): Promise<void> {
   await sheets.spreadsheets.values.append({

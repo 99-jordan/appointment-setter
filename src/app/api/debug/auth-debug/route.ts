@@ -4,17 +4,17 @@ import {
   ELEVENLABS_SECRET_HEADER_LEGACY_PLUMBING
 } from '../../../../elevenlabs-secret-header.js';
 import {
-  buildPlumbingAuthDiagnostics,
+  buildAuthDiagnostics,
   getExpectedSecretFromEnv,
-  isPlumbingAuthDebugEnabled
-} from '../../../../lib/plumbing-auth-debug.js';
+  isAuthDebugEnabled
+} from '../../../../lib/auth-debug.js';
 
 /**
- * Temporary diagnostics: set DEBUG_PLUMBING_AUTH=1 on Vercel, GET without auth.
+ * Temporary diagnostics: set DEBUG_AUTH=1 on Vercel, GET without auth.
  * Remove or disable after debugging. Does not expose secret values.
  */
 export function GET(req: NextRequest) {
-  if (!isPlumbingAuthDebugEnabled()) {
+  if (!isAuthDebugEnabled()) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
@@ -24,7 +24,7 @@ export function GET(req: NextRequest) {
   const { value: expected = '' } = getExpectedSecretFromEnv();
 
   return NextResponse.json(
-    buildPlumbingAuthDiagnostics(incoming, expected),
+    buildAuthDiagnostics(incoming, expected),
     { status: 200 }
   );
 }

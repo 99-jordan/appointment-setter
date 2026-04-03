@@ -5,7 +5,6 @@ import type {
   IntakeFlowRow,
   RuleRow,
   ServiceAreaRow,
-  ServiceContextRow,
   ServiceRow,
   SheetData,
   SmsRow
@@ -56,8 +55,6 @@ export const logCallCanonicalSchema = z.object({
   status: z.string().min(1, 'Required')
 });
 
-/** @deprecated use logCallCanonicalSchema — alias for transition */
-export const logCallSchema = logCallCanonicalSchema;
 
 /** Canonical shape after `normalizeSendSmsInput` (agent: phone + messageType; legacy: to + templateId). */
 export const sendSmsCanonicalSchema = z.object({
@@ -72,8 +69,6 @@ export const sendSmsCanonicalSchema = z.object({
   messageText: z.string().default('')
 });
 
-/** @deprecated use sendSmsCanonicalSchema */
-export const sendSmsSchema = sendSmsCanonicalSchema;
 
 /** Canonical shape after `normalizeEscalateHumanInput` (agent: phone; legacy: callerPhone). */
 export const escalateHumanCanonicalSchema = z.object({
@@ -88,95 +83,7 @@ export const escalateHumanCanonicalSchema = z.object({
   reason: z.string().min(1, 'Required')
 });
 
-/** @deprecated use escalateHumanCanonicalSchema */
-export const escalateHumanSchema = escalateHumanCanonicalSchema;
 
-/** Generic appointment / consultation booking (after `normalizeBookAppointmentInput`). */
-export const bookAppointmentCanonicalSchema = z.object({
-  companyId: z.string().min(1, 'Required'),
-  callId: z.string().min(1),
-  name: z.string().default(''),
-  phone: z.string().min(5, 'Required (phone)'),
-  email: z.string().default(''),
-  postcode: z.string().default(''),
-  serviceCategory: z.string().default(''),
-  serviceType: z.string().default(''),
-  preferredDate: z.string().default(''),
-  preferredTimeWindow: z.string().default(''),
-  notes: z.string().default(''),
-  source: z.string().default('voice_agent')
-});
-
-/** Service-business call log (after `normalizeLogServiceCallInput`). */
-export const logServiceCallCanonicalSchema = z.object({
-  companyId: z.string().min(1, 'Required'),
-  callId: z.string().min(1),
-  intent: z.string().min(1, 'Required'),
-  name: z.string().default(''),
-  phone: z.string().default(''),
-  email: z.string().default(''),
-  postcode: z.string().default(''),
-  serviceCategory: z.string().default(''),
-  serviceType: z.string().default(''),
-  preferredDate: z.string().default(''),
-  preferredTimeWindow: z.string().default(''),
-  notes: z.string().min(1, 'Required'),
-  actionTaken: z.string().min(1, 'Required'),
-  smsSent: z.string().default(''),
-  status: z.string().min(1, 'Required')
-});
-
-/** Service SMS (after `normalizeSendServiceSmsInput`). */
-export const sendServiceSmsCanonicalSchema = z.object({
-  companyId: z.string().min(1),
-  callId: z.string().min(1),
-  to: z.string().min(5, 'Required (phone or to)'),
-  templateId: z.string().min(1, 'Required (templateId or messageType)'),
-  name: z.string().default(''),
-  issueSummary: z.string().default(''),
-  postcode: z.string().default(''),
-  bookingLink: z.string().default(''),
-  messageText: z.string().default(''),
-  serviceCategory: z.string().default(''),
-  serviceType: z.string().default(''),
-  preferredDate: z.string().default(''),
-  preferredTimeWindow: z.string().default(''),
-  email: z.string().default('')
-});
-
-export const serviceContextQuerySchema = z.object({
-  companyId: z.string().optional()
-});
-
-export const serviceCrmSyncPayloadSchema = z.object({
-  companyId: z.string().min(1),
-  callId: z.string().optional(),
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().optional(),
-  postcode: z.string().optional(),
-  serviceCategory: z.string().optional(),
-  serviceType: z.string().optional(),
-  preferredDate: z.string().optional(),
-  preferredTimeWindow: z.string().optional(),
-  notes: z.string().optional(),
-  source: z.string().optional(),
-  status: z.string().optional()
-});
-
-export const serviceCrmSyncEnvelopeSchema = z.object({
-  provider: z.literal('hubspot'),
-  action: z.literal('appointment_request'),
-  payload: serviceCrmSyncPayloadSchema
-});
-
-function splitDelimitedList(raw: string | undefined): string[] {
-  if (!raw?.trim()) return [];
-  return raw
-    .split(/[\n,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 function intakeStepOrder(step: string | number): number {
   const n = Number(step);
@@ -360,35 +267,6 @@ export function buildCompanyContext(data: SheetData, companyId: string) {
       'medical_emergency_policy_text',
       'medical_emergency_policy'
     )
-  };
-}
-
-function getServiceContextRow(data: SheetData, companyId: string): ServiceContextRow | undefined {
-  return data.serviceContext.find((row) => matchesCompanyRow(row.company_id, companyId));
-}
-
-/** Merges `Company` sheet row with optional `ServiceContext` tab for generic appointment agents. */
-export function buildServiceContext(data: SheetData, companyId: string) {
-  const base = buildCompanyContext(data, companyId);
-  const row = getServiceContextRow(data, companyId);
-
-  const openingHours = {
-    standard: base.standardHours,
-    afterHours: base.emergencyHours
-  };
-
-  return {
-    ...base,
-    openingHours,
-    appointmentPolicies: row?.appointment_policies?.trim() ?? '',
-    serviceCategories: splitDelimitedList(row?.service_categories),
-    serviceTypes: splitDelimitedList(row?.service_types),
-    coverageArea: row?.coverage_notes?.trim() || base.serviceArea,
-    consultationRules: row?.consultation_rules?.trim() ?? '',
-    cancellationPolicy: row?.cancellation_policy?.trim() ?? '',
-    sameDayAppointmentsAllowed: (row?.same_day_appointments ?? '').trim().toLowerCase() === 'yes',
-    estimatesOffered: (row?.estimates_offered ?? '').trim().toLowerCase() === 'yes',
-    siteVisitsOffered: (row?.site_visits_offered ?? '').trim().toLowerCase() === 'yes'
   };
 }
 

@@ -8,10 +8,6 @@ import {
   readEscalationsRecent
 } from '../../../googleSheets.js';
 
-function formatSheetsFailure(err: unknown): string {
-  return googleSheetsApiErrorText(err);
-}
-
 /** Matches demo manual posts and production `postEscalationWebhook` payloads (+ optional postcode/address). */
 const bodySchema = z.object({
   companyId: z.string().min(1),
@@ -75,8 +71,7 @@ export async function POST(req: NextRequest) {
       p.reason
     ]);
   } catch (e) {
-    const message = formatSheetsFailure(e);
-    return NextResponse.json({ error: 'Sheets error', message }, { status: 500 });
+    return NextResponse.json({ error: 'Sheets error', message: googleSheetsApiErrorText(e) }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, received: true });
@@ -92,7 +87,6 @@ export async function GET() {
       escalations
     });
   } catch (e) {
-    const message = formatSheetsFailure(e);
-    return NextResponse.json({ error: 'Failed to read Escalations', message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to read Escalations', message: googleSheetsApiErrorText(e) }, { status: 500 });
   }
 }

@@ -36,14 +36,6 @@ export const MESSAGE_TYPE_TO_TEMPLATE_ID: Record<string, string> = {
   redirect_notice: 'SMS04'
 };
 
-/** Generic service SMS: map agent `messageType` to SMS tab `template_id`. */
-export const SERVICE_MESSAGE_TYPE_TO_TEMPLATE_ID: Record<string, string> = {
-  appointment_confirmation: 'SVC01',
-  consultation_confirmation: 'SVC02',
-  callback_confirmation: 'SVC03',
-  booking_link: 'SVC04',
-  follow_up: 'SVC05'
-};
 
 export function normalizeEscalateHumanInput(raw: unknown): Record<string, unknown> {
   const r = asRecord(raw);
@@ -121,102 +113,4 @@ export function normalizeLogCallInput(raw: unknown): Record<string, unknown> {
   };
 }
 
-function smsSentToString(v: unknown): string | undefined {
-  if (v === true) return 'true';
-  if (v === false) return 'false';
-  if (v === null || v === undefined) return undefined;
-  const s = String(v).trim();
-  return s === '' ? undefined : s;
-}
 
-export function normalizeBookAppointmentInput(raw: unknown): Record<string, unknown> {
-  const r = asRecord(raw);
-  let callId = pickStr(r, 'callId');
-  if (!callId) callId = generateCallId();
-
-  const preferredDate = pickStr(r, 'preferredDate', 'appointmentDate');
-  const preferredTimeWindow = pickStr(r, 'preferredTimeWindow', 'timeWindow');
-  const phone = pickStr(r, 'phone', 'callerPhone');
-  const serviceType = pickStr(r, 'serviceType', 'appointmentType');
-
-  return {
-    companyId: pickStr(r, 'companyId'),
-    callId,
-    name: pickStr(r, 'name') ?? '',
-    phone,
-    email: pickStr(r, 'email') ?? '',
-    postcode: pickStr(r, 'postcode') ?? '',
-    serviceCategory: pickStr(r, 'serviceCategory') ?? '',
-    serviceType: serviceType ?? '',
-    preferredDate: preferredDate ?? '',
-    preferredTimeWindow: preferredTimeWindow ?? '',
-    notes: pickStr(r, 'notes') ?? '',
-    source: pickStr(r, 'source') ?? 'voice_agent'
-  };
-}
-
-export function normalizeLogServiceCallInput(raw: unknown): Record<string, unknown> {
-  const r = asRecord(raw);
-  let callId = pickStr(r, 'callId');
-  if (!callId) callId = generateCallId();
-
-  const preferredDate = pickStr(r, 'preferredDate', 'appointmentDate');
-  const preferredTimeWindow = pickStr(r, 'preferredTimeWindow', 'timeWindow');
-  const serviceType = pickStr(r, 'serviceType', 'appointmentType');
-
-  return {
-    companyId: pickStr(r, 'companyId'),
-    callId,
-    intent: pickStr(r, 'intent'),
-    name: pickStr(r, 'name') ?? '',
-    phone: pickStr(r, 'phone', 'callerPhone') ?? '',
-    email: pickStr(r, 'email') ?? '',
-    postcode: pickStr(r, 'postcode') ?? '',
-    serviceCategory: pickStr(r, 'serviceCategory') ?? '',
-    serviceType: serviceType ?? '',
-    preferredDate: preferredDate ?? '',
-    preferredTimeWindow: preferredTimeWindow ?? '',
-    notes: pickStr(r, 'notes'),
-    actionTaken: pickStr(r, 'actionTaken'),
-    smsSent: smsSentToString(r.smsSent) ?? pickStr(r, 'smsSent'),
-    status: pickStr(r, 'status')
-  };
-}
-
-export function normalizeSendServiceSmsInput(raw: unknown): Record<string, unknown> {
-  const r = asRecord(raw);
-  let callId = pickStr(r, 'callId');
-  if (!callId) callId = generateCallId();
-
-  const to = pickStr(r, 'to', 'phone');
-  const templateIdDirect = pickStr(r, 'templateId');
-  const messageType = pickStr(r, 'messageType');
-
-  let templateId = templateIdDirect;
-  if (!templateId && messageType) {
-    const mapped = SERVICE_MESSAGE_TYPE_TO_TEMPLATE_ID[messageType];
-    if (!mapped) {
-      throw new HttpValidationError({
-        messageType: `Unknown messageType "${messageType}". Use templateId or one of: ${Object.keys(SERVICE_MESSAGE_TYPE_TO_TEMPLATE_ID).join(', ')}.`
-      });
-    }
-    templateId = mapped;
-  }
-
-  return {
-    companyId: pickStr(r, 'companyId'),
-    callId,
-    to,
-    templateId,
-    name: pickStr(r, 'name') ?? '',
-    issueSummary: pickStr(r, 'issueSummary') ?? '',
-    postcode: pickStr(r, 'postcode') ?? '',
-    bookingLink: pickStr(r, 'bookingLink') ?? '',
-    messageText: pickStr(r, 'messageText') ?? '',
-    serviceCategory: pickStr(r, 'serviceCategory') ?? '',
-    serviceType: pickStr(r, 'serviceType', 'appointmentType') ?? '',
-    preferredDate: pickStr(r, 'preferredDate', 'appointmentDate') ?? '',
-    preferredTimeWindow: pickStr(r, 'preferredTimeWindow', 'timeWindow') ?? '',
-    email: pickStr(r, 'email') ?? ''
-  };
-}

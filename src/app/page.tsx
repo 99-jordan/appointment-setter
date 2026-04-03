@@ -14,7 +14,9 @@ const ENDPOINTS = [
   { method: 'POST' as const, path: '/api/send-sms' },
   { method: 'POST' as const, path: '/api/escalate-human' },
   { method: 'POST' as const, path: '/api/log-call' },
-  { method: 'POST' as const, path: '/api/book_appointment' },
+  { method: 'POST' as const, path: '/api/check-availability' },
+  { method: 'POST' as const, path: '/api/book-appointment' },
+  { method: 'POST' as const, path: '/api/book_appointment (legacy)' },
   { method: 'POST' as const, path: '/api/escalation-webhook-demo' },
   { method: 'GET' as const, path: '/api/escalation-webhook-demo' },
   { method: 'POST' as const, path: '/api/crm-sync' }
@@ -37,7 +39,7 @@ const OPTIONAL_ENV = [
   { name: 'TWILIO_FROM_NUMBER', note: '' },
   {
     name: 'ESCALATION_WEBHOOK_URL',
-    note: 'For POST /api/escalate-human — demo: https://plumbing-tools-api.vercel.app/api/escalation-webhook-demo'
+    note: 'For POST /api/escalate-human — use your own deployment URL /api/escalation-webhook-demo for demo'
   },
   { name: 'ESCALATION_WEBHOOK_SECRET', note: 'Optional webhook header' },
   { name: 'ESCALATION_TRANSFER_NUMBER', note: 'Optional PSTN hint' },

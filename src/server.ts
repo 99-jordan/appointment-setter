@@ -1,10 +1,11 @@
-import express, { type Request } from 'express';
+import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { ZodError } from 'zod';
 import { requireElevenSecret } from './auth.js';
 import { config } from './config.js';
 import {
   handleBookAppointment,
+  handleCheckAvailability,
   handleCompanyContext,
   handleCrmSync,
   handleEscalateHuman,
@@ -34,7 +35,9 @@ const rootLines = [
   'POST /api/send-sms',
   'POST /api/escalate-human',
   'POST /api/log-call',
-  'POST /api/book_appointment',
+  'POST /api/check-availability',
+  'POST /api/book-appointment',
+  'POST /api/book_appointment (legacy)',
   'POST /api/crm-sync',
   'GET /api/health-scan',
   '',
@@ -47,11 +50,41 @@ app.get('/', (_req, res) => {
 
 app.use('/api', requireElevenSecret);
 
+function sendApiError(res: Response, error: unknown, defaultStatus = 400): void {
+  if (error instanceof HubspotNotConfiguredError) {
+    res.status(503).json({ error: 'HubSpot not configured', missing: error.missing });
+    return;
+  }
+  if (error instanceof HttpValidationError) {
+    res.status(400).json({ error: 'Validation failed', fields: error.fields });
+    return;
+  }
+  if (error instanceof ZodError) {
+    const fields: Record<string, string> = {};
+    for (const iss of error.errors) {
+      fields[iss.path.length ? iss.path.join('.') : '_root'] = iss.message;
+    }
+    res.status(400).json({ error: 'Validation failed', fields });
+    return;
+  }
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  const statusCode = (error as Error & { statusCode?: number }).statusCode;
+  if (statusCode === 503) {
+    res.status(503).json({ error: message });
+    return;
+  }
+  if (message.startsWith('SMS template not found')) {
+    res.status(404).json({ error: message });
+    return;
+  }
+  res.status(defaultStatus).json({ error: message });
+}
+
 app.get('/api/health-scan', async (_req, res) => {
   try {
     res.json(await runProtectedHealthScan());
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    sendApiError(res, error, 500);
   }
 });
 
@@ -76,153 +109,79 @@ function companyIdFromReq(req: Request): string | undefined {
 }
 
 app.get('/api/company-context', async (req, res) => {
-  try {
-    res.json(await handleCompanyContext(queryCompanyId(req)));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleCompanyContext(queryCompanyId(req))); }
+  catch (error) { sendApiError(res, error, 500); }
 });
 
 app.post('/api/company-context', async (req, res) => {
-  try {
-    res.json(await handleCompanyContext(companyIdFromReq(req)));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleCompanyContext(companyIdFromReq(req))); }
+  catch (error) { sendApiError(res, error, 500); }
 });
 
 app.get('/api/intake-flow', async (req, res) => {
   try {
     const askWhen = req.query.askWhen !== undefined ? String(req.query.askWhen) : undefined;
     res.json(await handleIntakeFlow(queryCompanyId(req), askWhen));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  } catch (error) { sendApiError(res, error, 500); }
 });
 
 app.post('/api/intake-flow', async (req, res) => {
   try {
     const askWhen = bodyString(req, 'askWhen') ?? (req.query.askWhen !== undefined ? String(req.query.askWhen) : undefined);
     res.json(await handleIntakeFlow(companyIdFromReq(req), askWhen));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  } catch (error) { sendApiError(res, error, 500); }
 });
 
 app.get('/api/services-search', async (req, res) => {
-  try {
-    const query = String(req.query.query || '');
-    res.json(await handleServicesSearch(queryCompanyId(req), query));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleServicesSearch(queryCompanyId(req), String(req.query.query || ''))); }
+  catch (error) { sendApiError(res, error, 500); }
 });
 
 app.post('/api/services-search', async (req, res) => {
-  try {
-    const query = bodyString(req, 'query') ?? String(req.query.query || '');
-    res.json(await handleServicesSearch(companyIdFromReq(req), query));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleServicesSearch(companyIdFromReq(req), bodyString(req, 'query') ?? String(req.query.query || ''))); }
+  catch (error) { sendApiError(res, error, 500); }
 });
 
 app.post('/api/rules-applicable', async (req, res) => {
-  try {
-    res.json(await handleRulesApplicable(req.body));
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleRulesApplicable(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.post('/api/send-sms', async (req, res) => {
-  try {
-    res.json(await handleSendSms(req.body));
-  } catch (error) {
-    if (error instanceof HttpValidationError) {
-      res.status(400).json({ error: 'Validation failed', fields: error.fields });
-      return;
-    }
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const statusCode = (error as Error & { statusCode?: number }).statusCode;
-    if (statusCode === 503) {
-      res.status(503).json({ error: message });
-      return;
-    }
-    if (message.startsWith('SMS template not found')) {
-      res.status(404).json({ error: message });
-      return;
-    }
-    res.status(400).json({ error: message });
-  }
+  try { res.json(await handleSendSms(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.post('/api/escalate-human', async (req, res) => {
-  try {
-    res.json(await handleEscalateHuman(req.body));
-  } catch (error) {
-    if (error instanceof HttpValidationError) {
-      res.status(400).json({ error: 'Validation failed', fields: error.fields });
-      return;
-    }
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const statusCode = (error as Error & { statusCode?: number }).statusCode;
-    if (statusCode === 503) {
-      res.status(503).json({ error: message });
-      return;
-    }
-    res.status(400).json({ error: message });
-  }
+  try { res.json(await handleEscalateHuman(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.post('/api/log-call', async (req, res) => {
-  try {
-    res.json(await handleLogCall(req.body));
-  } catch (error) {
-    if (error instanceof HttpValidationError) {
-      res.status(400).json({ error: 'Validation failed', fields: error.fields });
-      return;
-    }
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleLogCall(req.body)); }
+  catch (error) { sendApiError(res, error); }
+});
+
+app.post('/api/check-availability', async (req, res) => {
+  try { res.json(await handleCheckAvailability(req.body)); }
+  catch (error) { sendApiError(res, error); }
+});
+
+app.post('/api/book-appointment', async (req, res) => {
+  try { res.json(await handleBookAppointment(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.post('/api/book_appointment', async (req, res) => {
-  try {
-    res.json(await handleBookAppointment(req.body));
-  } catch (error) {
-    if (error instanceof HttpValidationError) {
-      res.status(400).json({ error: 'Validation failed', fields: error.fields });
-      return;
-    }
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleBookAppointment(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.post('/api/crm-sync', async (req, res) => {
-  try {
-    res.json(await handleCrmSync(req.body));
-  } catch (error) {
-    if (error instanceof HubspotNotConfiguredError) {
-      res.status(503).json({ error: 'HubSpot not configured', missing: error.missing });
-      return;
-    }
-    if (error instanceof HttpValidationError) {
-      res.status(400).json({ error: 'Validation failed', fields: error.fields });
-      return;
-    }
-    if (error instanceof ZodError) {
-      const fields: Record<string, string> = {};
-      for (const iss of error.errors) {
-        fields[iss.path.length ? iss.path.join('.') : '_root'] = iss.message;
-      }
-      res.status(400).json({ error: 'Validation failed', fields });
-      return;
-    }
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-  }
+  try { res.json(await handleCrmSync(req.body)); }
+  catch (error) { sendApiError(res, error); }
 });
 
 app.listen(config.port, () => {
-  console.log(`Plumbing Tools API listening on port ${config.port}`);
+  console.log(`Dental Tools API listening on port ${config.port}`);
 });

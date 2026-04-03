@@ -1,4 +1,4 @@
-/** Normalized plumbing call payload for CRM sync (HubSpot emergency_call). */
+/** Normalized call payload for CRM sync (HubSpot emergency_call). */
 export type EmergencyCallPayload = {
   companyId: string;
   callId: string;

@@ -8,7 +8,10 @@ import { config } from './config.js';
 const calendarAuth = new google.auth.JWT({
   email: config.googleServiceAccountEmail,
   key: config.googlePrivateKey,
-  scopes: ['https://www.googleapis.com/auth/calendar.events']
+  scopes: [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.readonly'
+  ]
 });
 
 const calendar = google.calendar({ version: 'v3', auth: calendarAuth });

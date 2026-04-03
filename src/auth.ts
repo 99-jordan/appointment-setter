@@ -5,10 +5,10 @@ import {
   ELEVENLABS_SECRET_HEADER_LEGACY_PLUMBING
 } from './elevenlabs-secret-header.js';
 import {
-  buildPlumbingAuthDiagnostics,
-  isPlumbingAuthDebugEnabled,
-  logPlumbingAuthDebug
-} from './lib/plumbing-auth-debug.js';
+  buildAuthDiagnostics,
+  isAuthDebugEnabled,
+  logAuthDebug
+} from './lib/auth-debug.js';
 
 function incomingSecret(req: Request): string | undefined {
   return (
@@ -19,7 +19,7 @@ function incomingSecret(req: Request): string | undefined {
 
 export function requireElevenSecret(req: Request, res: Response, next: NextFunction) {
   const secret = incomingSecret(req);
-  logPlumbingAuthDebug('express', secret ?? null, config.elevenSecret);
+  logAuthDebug('express', secret ?? null, config.elevenSecret);
 
   if (!secret || secret !== config.elevenSecret) {
     const body: Record<string, unknown> = {
@@ -28,8 +28,8 @@ export function requireElevenSecret(req: Request, res: Response, next: NextFunct
       header: ELEVENLABS_DENTALPRO_SECRET_HEADER,
       legacyHeaderAlsoAccepted: ELEVENLABS_SECRET_HEADER_LEGACY_PLUMBING
     };
-    if (isPlumbingAuthDebugEnabled()) {
-      body.debug = buildPlumbingAuthDiagnostics(secret ?? null, config.elevenSecret);
+    if (isAuthDebugEnabled()) {
+      body.debug = buildAuthDiagnostics(secret ?? null, config.elevenSecret);
     }
     return res.status(401).json(body);
   }

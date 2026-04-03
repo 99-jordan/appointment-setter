@@ -9,7 +9,9 @@ const nextConfig: NextConfig = {
     return [
       { source: '/api/company-context/', destination: '/api/company-context' },
       { source: '/api/intake-flow/', destination: '/api/intake-flow' },
-      { source: '/api/services-search/', destination: '/api/services-search' }
+      { source: '/api/services-search/', destination: '/api/services-search' },
+      { source: '/api/check-availability/', destination: '/api/check-availability' },
+      { source: '/api/book-appointment/', destination: '/api/book-appointment' }
     ];
   },
   webpack: (config) => {

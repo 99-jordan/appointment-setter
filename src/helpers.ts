@@ -1,7 +1,3 @@
-export function tokenize(input: string): string[] {
-  return input.toLowerCase().split(/[^a-z0-9]+/i).filter(Boolean);
-}
-
 export function normalisePostcodePrefix(postcode: string): string {
   return postcode.trim().toUpperCase().replace(/\s+/g, '');
 }

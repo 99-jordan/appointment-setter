@@ -2,7 +2,7 @@
 
 ElevenLabs-ready HTTP tools backed by **one Google Sheet** (`GOOGLE_SHEET_ID`). Primary use case: a **single implant / cosmetic dental clinic** whose knowledge base lives in that sheet (Company, Services, FAQs, EmergencyRules, etc.).
 
-Legacy plumbing-oriented behaviour is still supported where it is cheap (e.g. optional `companyId`, gas-policy triage only if `gas_policy_text` is set in the sheet).
+Legacy plumbing-oriented field names are still accepted where backward compatibility is cheap (e.g. optional `companyId`, gas-policy triage only if `gas_policy_text` is set in the sheet).
 
 ## Architecture
 
@@ -147,18 +147,18 @@ Optional: `SMOKE_BASE_URL`, `SMOKE_COMPANY_ID`, `SMOKE_SKIP_LOG_CALL=1`, `SMOKE_
 
 ### Temporary auth debugging
 
-Set **`DEBUG_PLUMBING_AUTH=1`** (Vercel env + redeploy). Then:
+Set **`DEBUG_AUTH=1`** (Vercel env + redeploy). Then:
 
 - Failed auth responses include a **`debug`** object: `hasHeader`, `hasEnv`, `headerLength`, `envLength`, `matches`, `expectedEnvKey`, `primaryHeader`, `legacyHeaderAlsoAccepted`, `looksLikeUnresolvedPlaceholder` (true if the incoming value still looks like an unresolved ElevenLabs `{{secret:…}}` placeholder).
-- Function logs include a JSON line `[plumbing-auth:next] …` (no secret values).
-- **`GET /api/debug/auth-plumbing`** returns the same diagnostic shape for the incoming request (404 when the flag is off).
+- Function logs include a JSON line `[auth-debug:next] …` (no secret values).
+- **`GET /api/debug/auth-debug`** returns the same diagnostic shape for the incoming request (404 when the flag is off).
 
 Remove the flag when finished.
 
 **Manual check with real secret** (replace `YOUR_SECRET`):
 
 ```bash
-curl -i "https://plumbing-tools-api.vercel.app/api/company-context" \
+curl -i "https://<your-project>.vercel.app/api/company-context" \
   -H "x-elevenlabs-secret-dentalpro: YOUR_SECRET"
 ```
 
@@ -333,7 +333,7 @@ Response includes `webhookDelivered`, `webhookStatus` (when a webhook URL is set
 Point **`ESCALATION_WEBHOOK_URL`** at this URL to log payloads into a new **`Escalations`** sheet tab (created automatically):
 
 ```text
-ESCALATION_WEBHOOK_URL=https://plumbing-tools-api.vercel.app/api/escalation-webhook-demo
+ESCALATION_WEBHOOK_URL=https://<your-project>.vercel.app/api/escalation-webhook-demo
 ```
 
 (Use your real Vercel hostname if different.)
@@ -577,22 +577,6 @@ Use `intake-flow` when you want the sheet to drive which questions to ask and in
 Use `send-sms` after you know which `smsTemplateId` applies (often from `rules-applicable`).
 
 Use `escalate-human` when `transferNow` is true or the caller needs an immediate human handoff.
-
-## Why this mirrors HostAssist
-
-Your current HostAssist pattern is:
-
-- one focused endpoint per business memory bucket
-- one endpoint for rules
-- one endpoint for call logging
-- all protected by `x-elevenlabs-secret-dentalpro`
-
-This plumbing version keeps the same shape, but swaps restaurant context and menu logic for:
-
-- plumbing company context
-- service matching
-- emergency triage rules
-- call logging
 
 ## Possible next additions
 

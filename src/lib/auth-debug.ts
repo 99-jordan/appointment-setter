@@ -3,8 +3,8 @@ import {
   ELEVENLABS_SECRET_HEADER_LEGACY_PLUMBING
 } from '../elevenlabs-secret-header.js';
 
-export function isPlumbingAuthDebugEnabled(): boolean {
-  return process.env.DEBUG_PLUMBING_AUTH === '1';
+export function isAuthDebugEnabled(): boolean {
+  return process.env.DEBUG_AUTH === '1' || process.env.DEBUG_PLUMBING_AUTH === '1';
 }
 
 /** Same resolution order as `config.elevenSecret`. */
@@ -31,7 +31,7 @@ export function getExpectedSecretFromEnv(): {
   return { value: undefined, source: null };
 }
 
-export type PlumbingAuthDiagnostics = {
+export type AuthDiagnostics = {
   hasHeader: boolean;
   hasEnv: boolean;
   headerLength: number | null;
@@ -47,10 +47,10 @@ export type PlumbingAuthDiagnostics = {
   legacyHeaderAlsoAccepted: typeof ELEVENLABS_SECRET_HEADER_LEGACY_PLUMBING;
 };
 
-export function buildPlumbingAuthDiagnostics(
+export function buildAuthDiagnostics(
   incomingHeader: string | null,
   expectedSecret: string
-): PlumbingAuthDiagnostics {
+): AuthDiagnostics {
   const hasHeader = incomingHeader != null && incomingHeader.length > 0;
   const hasEnv = expectedSecret.length > 0;
   const headerLength = hasHeader ? incomingHeader!.length : null;
@@ -73,12 +73,12 @@ export function buildPlumbingAuthDiagnostics(
   };
 }
 
-export function logPlumbingAuthDebug(
+export function logAuthDebug(
   label: string,
   incomingHeader: string | null,
   expectedSecret: string
 ): void {
-  if (!isPlumbingAuthDebugEnabled()) return;
-  const d = buildPlumbingAuthDiagnostics(incomingHeader, expectedSecret);
-  console.log(`[plumbing-auth:${label}]`, JSON.stringify(d));
+  if (!isAuthDebugEnabled()) return;
+  const d = buildAuthDiagnostics(incomingHeader, expectedSecret);
+  console.log(`[auth-debug:${label}]`, JSON.stringify(d));
 }

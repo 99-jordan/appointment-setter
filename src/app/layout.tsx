@@ -10,8 +10,8 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Plumbing Tools API',
-  description: 'ElevenLabs-ready plumbing voice agent backend — Google Sheet tools, triage, SMS, call logs.'
+  title: 'Dental Tools API',
+  description: 'ElevenLabs-ready dental voice agent backend — Google Sheet tools, triage, SMS, call logs.'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
