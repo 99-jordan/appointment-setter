@@ -10,7 +10,11 @@ import type {
   SheetData,
   SmsRow
 } from './types.js';
-import { getDefaultCompanyId } from './clinic-default.js';
+import {
+  getDefaultCompanyId,
+  matchesCompanyRow,
+  SINGLE_CLINIC_COMPANY_ID
+} from './clinic-default.js';
 import { areaMatchesPrefix, scoreKeywordMatch, uniqueBy } from './helpers.js';
 
 function rowStr(row: Record<string, unknown>, ...keys: string[]): string {
@@ -188,9 +192,16 @@ function intakeMatchesAskWhen(row: IntakeFlowRow, askWhenFilter: string | undefi
 }
 
 function getCompany(data: SheetData, companyId: string): CompanyRow {
-  const company = data.company.find((row) => row.company_id === companyId);
-  if (!company) throw new Error(`Company not found: ${companyId}`);
-  return company;
+  const resolved = companyId.trim();
+  const byId = data.company.find((row) => String(row.company_id ?? '').trim() === resolved);
+  if (byId) return byId;
+  if (resolved === SINGLE_CLINIC_COMPANY_ID) {
+    const first = data.company.find((row) =>
+      Object.values(row as unknown as Record<string, unknown>).some((v) => String(v ?? '').trim() !== '')
+    );
+    if (first) return first;
+  }
+  throw new Error(`Company not found: ${companyId}`);
 }
 
 export function assertCompanyExists(data: SheetData, companyId: string): void {
@@ -198,7 +209,9 @@ export function assertCompanyExists(data: SheetData, companyId: string): void {
 }
 
 function getSmsById(data: SheetData, companyId: string, templateId: string): SmsRow | undefined {
-  return data.sms.find((row) => row.company_id === companyId && row.template_id === templateId);
+  return data.sms.find(
+    (row) => matchesCompanyRow(row.company_id, companyId) && row.template_id === templateId
+  );
 }
 
 export function resolveSmsTemplate(data: SheetData, companyId: string, templateId: string): SmsRow {
@@ -238,7 +251,7 @@ function detectCoverage(serviceAreas: ServiceAreaRow[], postcode?: string) {
 
 function detectServices(services: ServiceRow[], companyId: string, issueSummary: string): ServiceRow[] {
   const scored = services
-    .filter((row) => row.company_id === companyId)
+    .filter((row) => matchesCompanyRow(row.company_id, companyId))
     .map((row) => ({ row, score: scoreKeywordMatch(issueSummary, `${row.service_name}, ${row.common_customer_words}, ${row.what_it_means}`) }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -248,24 +261,41 @@ function detectServices(services: ServiceRow[], companyId: string, issueSummary:
 }
 
 function detectRule(data: SheetData, input: z.infer<typeof rulesApplicableSchema>): RuleRow | undefined {
+  const companyId = String(input.companyId ?? '');
   const base = data.emergencyRules
-    .filter((row) => row.company_id === input.companyId)
+    .filter((row) => matchesCompanyRow(row.company_id, companyId))
     .map((row) => ({ row, score: scoreKeywordMatch(input.issueSummary, `${row.scenario}, ${row.trigger_keywords}`) }))
     .sort((a, b) => b.score - a.score);
 
   const bestKeywordMatch = base.find((item) => item.score > 0)?.row;
 
   if (input.electricsRisk) {
-    return data.emergencyRules.find((row) => row.company_id === input.companyId && row.rule_id === 'R03') ?? bestKeywordMatch;
+    return (
+      data.emergencyRules.find(
+        (row) => matchesCompanyRow(row.company_id, companyId) && row.rule_id === 'R03'
+      ) ?? bestKeywordMatch
+    );
   }
   if (input.sewageRisk) {
-    return data.emergencyRules.find((row) => row.company_id === input.companyId && row.rule_id === 'R04') ?? bestKeywordMatch;
+    return (
+      data.emergencyRules.find(
+        (row) => matchesCompanyRow(row.company_id, companyId) && row.rule_id === 'R04'
+      ) ?? bestKeywordMatch
+    );
   }
   if (input.onlyToiletUnusable) {
-    return data.emergencyRules.find((row) => row.company_id === input.companyId && row.rule_id === 'R06') ?? bestKeywordMatch;
+    return (
+      data.emergencyRules.find(
+        (row) => matchesCompanyRow(row.company_id, companyId) && row.rule_id === 'R06'
+      ) ?? bestKeywordMatch
+    );
   }
   if (input.noWater) {
-    return data.emergencyRules.find((row) => row.company_id === input.companyId && row.rule_id === 'R07') ?? bestKeywordMatch;
+    return (
+      data.emergencyRules.find(
+        (row) => matchesCompanyRow(row.company_id, companyId) && row.rule_id === 'R07'
+      ) ?? bestKeywordMatch
+    );
   }
 
   return bestKeywordMatch;
@@ -273,7 +303,7 @@ function detectRule(data: SheetData, input: z.infer<typeof rulesApplicableSchema
 
 function findRelevantFaqs(faqs: FaqRow[], companyId: string, issueSummary: string): FaqRow[] {
   return faqs
-    .filter((row) => row.company_id === companyId)
+    .filter((row) => matchesCompanyRow(row.company_id, companyId))
     .map((row) => ({ row, score: scoreKeywordMatch(issueSummary, `${row.topic}, ${row.customer_question}, ${row.approved_answer}`) }))
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -284,7 +314,7 @@ function findRelevantFaqs(faqs: FaqRow[], companyId: string, issueSummary: strin
 export function buildIntakeFlow(data: SheetData, companyId: string, askWhen?: string) {
   getCompany(data, companyId);
   const steps = data.intakeFlow
-    .filter((row) => row.company_id === companyId)
+    .filter((row) => matchesCompanyRow(row.company_id, companyId))
     .filter((row) => intakeMatchesAskWhen(row, askWhen))
     .sort((a, b) => intakeStepOrder(a.step_no) - intakeStepOrder(b.step_no))
     .map((row) => ({
@@ -304,7 +334,7 @@ export function buildCompanyContext(data: SheetData, companyId: string) {
   const company = getCompany(data, companyId);
   const ext = company as unknown as Record<string, unknown>;
   return {
-    companyId: company.company_id,
+    companyId: String(company.company_id ?? '').trim() || companyId,
     companyName: company.company_name,
     brandName: company.brand_name,
     phoneNumber: company.phone_number,
@@ -334,7 +364,7 @@ export function buildCompanyContext(data: SheetData, companyId: string) {
 }
 
 function getServiceContextRow(data: SheetData, companyId: string): ServiceContextRow | undefined {
-  return data.serviceContext.find((row) => row.company_id === companyId);
+  return data.serviceContext.find((row) => matchesCompanyRow(row.company_id, companyId));
 }
 
 /** Merges `Company` sheet row with optional `ServiceContext` tab for generic appointment agents. */
@@ -393,7 +423,9 @@ export function buildRulesApplicable(data: SheetData, rawInput: unknown) {
   const companyId = base.companyId?.trim() || getDefaultCompanyId(data);
   const input = { ...base, companyId };
   const company = getCompany(data, input.companyId);
-  const serviceAreas = data.serviceAreas.filter((row) => row.company_id === input.companyId);
+  const serviceAreas = data.serviceAreas.filter((row) =>
+    matchesCompanyRow(row.company_id, input.companyId)
+  );
   const services = detectServices(data.services, input.companyId, input.issueSummary);
   const rule = detectRule(data, input);
   const coverage = detectCoverage(serviceAreas, input.postcode);

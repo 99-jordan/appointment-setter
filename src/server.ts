@@ -27,9 +27,9 @@ const rootLines = [
   '',
   'API Online',
   '',
-  'GET /api/company-context',
-  'GET /api/services-search',
-  'GET /api/intake-flow',
+  'GET|POST /api/company-context',
+  'GET|POST /api/services-search',
+  'GET|POST /api/intake-flow',
   'POST /api/rules-applicable',
   'POST /api/send-sms',
   'POST /api/escalate-human',
@@ -62,9 +62,30 @@ function queryCompanyId(req: Request): string | undefined {
   return undefined;
 }
 
+function bodyString(req: Request, key: string): string | undefined {
+  const b = req.body as Record<string, unknown> | undefined;
+  if (!b || !(key in b)) return undefined;
+  const v = b[key];
+  if (v === undefined || v === null) return undefined;
+  const s = String(v).trim();
+  return s === '' ? undefined : s;
+}
+
+function companyIdFromReq(req: Request): string | undefined {
+  return bodyString(req, 'companyId') ?? queryCompanyId(req);
+}
+
 app.get('/api/company-context', async (req, res) => {
   try {
     res.json(await handleCompanyContext(queryCompanyId(req)));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+app.post('/api/company-context', async (req, res) => {
+  try {
+    res.json(await handleCompanyContext(companyIdFromReq(req)));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
@@ -79,10 +100,28 @@ app.get('/api/intake-flow', async (req, res) => {
   }
 });
 
+app.post('/api/intake-flow', async (req, res) => {
+  try {
+    const askWhen = bodyString(req, 'askWhen') ?? (req.query.askWhen !== undefined ? String(req.query.askWhen) : undefined);
+    res.json(await handleIntakeFlow(companyIdFromReq(req), askWhen));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 app.get('/api/services-search', async (req, res) => {
   try {
     const query = String(req.query.query || '');
     res.json(await handleServicesSearch(queryCompanyId(req), query));
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+app.post('/api/services-search', async (req, res) => {
+  try {
+    const query = bodyString(req, 'query') ?? String(req.query.query || '');
+    res.json(await handleServicesSearch(companyIdFromReq(req), query));
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
