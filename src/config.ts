@@ -16,6 +16,19 @@ function optional(name: string): string | undefined {
   return value;
 }
 
+/** Service account email: canonical GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_CLIENT_EMAIL. */
+function requiredGoogleServiceAccountEmail(): string {
+  const a = optional('GOOGLE_SERVICE_ACCOUNT_EMAIL');
+  const b = optional('GOOGLE_CLIENT_EMAIL');
+  const v = (a ?? b)?.trim();
+  if (!v) {
+    throw new Error(
+      'Missing environment variable: GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_CLIENT_EMAIL'
+    );
+  }
+  return v;
+}
+
 function requiredGooglePrivateKey(): string {
   const raw = required('GOOGLE_PRIVATE_KEY').trim();
   // dotenv strips surrounding quotes in most cases, but keep this robust for copied values
@@ -57,7 +70,7 @@ export const config = {
     return getElevenLabsSecret();
   },
   googleSheetId: required('GOOGLE_SHEET_ID'),
-  googleServiceAccountEmail: required('GOOGLE_SERVICE_ACCOUNT_EMAIL'),
+  googleServiceAccountEmail: requiredGoogleServiceAccountEmail(),
   googlePrivateKey: requiredGooglePrivateKey(),
   twilioAccountSid: optional('TWILIO_ACCOUNT_SID'),
   twilioAuthToken: optional('TWILIO_AUTH_TOKEN'),

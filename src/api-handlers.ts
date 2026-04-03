@@ -25,7 +25,7 @@ import {
 } from './tool-payload-normalize.js';
 import { parseCanonical } from './tool-validation.js';
 import { resolveSlot, parseIsoSlot, TIMEZONE } from './lib/date-parse.js';
-import { checkAvailability, createBooking, isCalendarConfigured } from './lib/calendar-service.js';
+import { checkAvailability, createBooking } from './lib/calendar-service.js';
 import { HttpValidationError } from './http-validation-error.js';
 
 const crmSyncPayloadSchema = z.object({
@@ -225,7 +225,6 @@ const checkAvailabilitySchema = z.object({
   service: z.string().optional(),
   callerName: z.string().optional(),
   notes: z.string().optional(),
-  companyId: z.string().optional(),
   durationMinutes: z.coerce.number().int().min(10).max(480).optional()
 });
 
@@ -234,13 +233,6 @@ const DEFAULT_DURATION_MINUTES = 60;
 export async function handleCheckAvailability(body: unknown) {
   const parsed = checkAvailabilitySchema.parse(body);
   const duration = parsed.durationMinutes ?? DEFAULT_DURATION_MINUTES;
-
-  if (!isCalendarConfigured()) {
-    throw Object.assign(
-      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
-      { statusCode: 503 }
-    );
-  }
 
   const resolved = resolveSlot(parsed.preferredDate, parsed.preferredTime, duration);
 
@@ -254,13 +246,6 @@ export async function handleCheckAvailability(body: unknown) {
 
   const { slot } = resolved;
   const availability = await checkAvailability(slot.startDate, slot.endDate, duration);
-
-  if (availability.status === 'calendar_not_configured') {
-    throw Object.assign(
-      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
-      { statusCode: 503 }
-    );
-  }
 
   return {
     ok: true,
@@ -286,8 +271,8 @@ export async function handleCheckAvailability(body: unknown) {
 // ── book-appointment ─────────────────────────────────────────────────────────
 
 const bookAppointmentSchema = z.object({
-  patientName: z.string().min(1, 'patientName is required'),
-  phone: z.string().min(5, 'phone is required (min 5 chars)'),
+  patientName: z.coerce.string().min(1, 'patientName is required'),
+  phone: z.coerce.string().min(5, 'phone is required (min 5 chars)'),
   email: z.string().optional(),
   service: z.string().optional(),
   slotStart: z.string().optional(),
@@ -297,7 +282,6 @@ const bookAppointmentSchema = z.object({
   existingPatient: z.union([z.boolean(), z.string()]).optional(),
   notes: z.string().optional(),
   consentToSms: z.union([z.boolean(), z.string()]).optional(),
-  companyId: z.string().optional(),
   durationMinutes: z.coerce.number().int().min(10).max(480).optional()
 });
 
@@ -313,13 +297,6 @@ function sanitiseBoolField(v: unknown): boolean | undefined {
 export async function handleBookAppointment(body: unknown) {
   const raw = bookAppointmentSchema.parse(body);
   const duration = raw.durationMinutes ?? DEFAULT_DURATION_MINUTES;
-
-  if (!isCalendarConfigured()) {
-    throw Object.assign(
-      new Error('Google Calendar is not configured. Set GOOGLE_CALENDAR_ID.'),
-      { statusCode: 503 }
-    );
-  }
 
   // Resolve the slot: trust explicit slotStart/slotEnd if provided
   let slotStartDate: Date;
@@ -343,10 +320,6 @@ export async function handleBookAppointment(body: unknown) {
     slotEndDate = resolved.slot.endDate;
   }
 
-  // Resolve companyId
-  const data = await loadSheetData();
-  const companyId = raw.companyId?.trim() || getDefaultCompanyId(data);
-
   const callId = generateCallId();
 
   // Sanitise fields that may receive garbage from LLM tool mapping
@@ -366,15 +339,14 @@ export async function handleBookAppointment(body: unknown) {
       existingPatient !== undefined ? `Existing patient: ${existingPatient ? 'yes' : 'no'}` : '',
       consentToSms !== undefined ? `SMS consent: ${consentToSms ? 'yes' : 'no'}` : ''
     ].filter(Boolean).join('\n'),
-    companyId,
     callId
   });
 
-  // Also persist to Sheets as backup
+  // Also persist to Sheets as backup (companyId column kept for sheet schema; single-clinic uses empty)
   try {
     await appendAppointmentRow([
       new Date().toISOString(),
-      companyId,
+      '',
       callId,
       raw.patientName,
       raw.phone,

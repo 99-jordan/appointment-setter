@@ -18,6 +18,7 @@ import {
 import { runProtectedHealthScan } from './health-scan-runner.js';
 import { HubspotNotConfiguredError } from './crm/crm-errors.js';
 import { HttpValidationError } from './http-validation-error.js';
+import { StructuredApiError } from './lib/api-errors.js';
 
 const app = express();
 app.use(cors());
@@ -51,6 +52,14 @@ app.get('/', (_req, res) => {
 app.use('/api', requireElevenSecret);
 
 function sendApiError(res: Response, error: unknown, defaultStatus = 400): void {
+  if (error instanceof StructuredApiError) {
+    res.status(error.httpStatus).json({
+      ...(error.details ?? {}),
+      error: error.message,
+      code: error.code
+    });
+    return;
+  }
   if (error instanceof HubspotNotConfiguredError) {
     res.status(503).json({ error: 'HubSpot not configured', missing: error.missing });
     return;

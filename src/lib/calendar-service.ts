@@ -5,6 +5,8 @@
 import { google } from 'googleapis';
 import { config } from '../config.js';
 import { TIMEZONE, formatSlotIso, formatSlotLabel } from './date-parse.js';
+import { StructuredApiError } from './api-errors.js';
+import { mapGoogleCalendarError } from './map-google-calendar-error.js';
 
 const auth = new google.auth.JWT({
   email: config.googleServiceAccountEmail,
@@ -17,7 +19,7 @@ const auth = new google.auth.JWT({
 
 const calendar = google.calendar({ version: 'v3', auth });
 
-function calendarId(): string {
+function resolvedCalendarId(): string {
   return config.googleCalendarId?.trim() || 'primary';
 }
 
@@ -31,37 +33,37 @@ export type AvailabilitySlot = {
 
 export type AvailabilityResult =
   | { status: 'available' }
-  | { status: 'unavailable'; alternatives: AvailabilitySlot[] }
-  | { status: 'calendar_not_configured' };
+  | { status: 'unavailable'; alternatives: AvailabilitySlot[] };
 
 export async function checkAvailability(
   start: Date,
   end: Date,
   durationMinutes: number
 ): Promise<AvailabilityResult> {
-  const cid = calendarId();
-  if (cid === 'primary' && !config.googleCalendarId?.trim()) {
-    return { status: 'calendar_not_configured' };
-  }
+  const cid = resolvedCalendarId();
 
-  const res = await calendar.freebusy.query({
-    requestBody: {
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
-      timeZone: TIMEZONE,
-      items: [{ id: cid }]
+  try {
+    const res = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        timeZone: TIMEZONE,
+        items: [{ id: cid }]
+      }
+    });
+
+    const busy = res.data.calendars?.[cid]?.busy ?? [];
+    const isSlotFree = busy.length === 0;
+
+    if (isSlotFree) {
+      return { status: 'available' };
     }
-  });
 
-  const busy = res.data.calendars?.[cid]?.busy ?? [];
-  const isSlotFree = busy.length === 0;
-
-  if (isSlotFree) {
-    return { status: 'available' };
+    const alternatives = findAlternatives(start, busy, durationMinutes);
+    return { status: 'unavailable', alternatives };
+  } catch (e) {
+    mapGoogleCalendarError(e, { operation: 'freebusy.query', calendarId: cid });
   }
-
-  const alternatives = findAlternatives(start, busy, durationMinutes);
-  return { status: 'unavailable', alternatives };
 }
 
 /**
@@ -73,10 +75,6 @@ function findAlternatives(
   busy: Array<{ start?: string | null; end?: string | null }>,
   durationMin: number
 ): AvailabilitySlot[] {
-  const dayStart = new Date(original);
-  dayStart.setUTCHours(dayStart.getUTCHours() - (dayStart.getUTCHours() % 24));
-
-  // Build London 08:00 and 18:00 for the same date
   const refParts = new Intl.DateTimeFormat('en-GB', {
     timeZone: TIMEZONE,
     year: 'numeric',
@@ -93,7 +91,6 @@ function findAlternatives(
   const scanStart = new Date(`${dateStr}T08:00:00Z`);
   const scanEnd = new Date(`${dateStr}T18:00:00Z`);
 
-  // Adjust for London offset
   const offsetMs = londonOffsetMsForDate(original);
   scanStart.setTime(scanStart.getTime() - offsetMs);
   scanEnd.setTime(scanEnd.getTime() - offsetMs);
@@ -104,7 +101,7 @@ function findAlternatives(
     .sort((a, b) => a.start - b.start);
 
   const durationMs = durationMin * 60_000;
-  const stepMs = 30 * 60_000; // 30-minute increments
+  const stepMs = 30 * 60_000;
   const alternatives: AvailabilitySlot[] = [];
   const now = Date.now();
 
@@ -116,7 +113,6 @@ function findAlternatives(
     if (cursor < now) continue;
     const cEnd = cursor + durationMs;
     const overlaps = busyIntervals.some((b) => cursor < b.end && cEnd > b.start);
-    // skip the original slot
     if (
       cursor === original.getTime() ||
       (cursor >= original.getTime() && cursor < original.getTime() + durationMs)
@@ -142,6 +138,34 @@ function londonOffsetMsForDate(d: Date): number {
   return new Date(lonStr).getTime() - new Date(utcStr).getTime();
 }
 
+/** Throws StructuredApiError slot_conflict (409) if the interval overlaps busy time. */
+export async function assertSlotFreeForBooking(start: Date, end: Date): Promise<void> {
+  const cid = resolvedCalendarId();
+  try {
+    const res = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        timeZone: TIMEZONE,
+        items: [{ id: cid }]
+      }
+    });
+    const busy = res.data.calendars?.[cid]?.busy ?? [];
+    if (busy.length > 0) {
+      throw new StructuredApiError({
+        code: 'slot_conflict',
+        httpStatus: 409,
+        message:
+          'That time is no longer available in Google Calendar. Run check-availability again or pick another slot.',
+        details: { calendarId: cid }
+      });
+    }
+  } catch (e) {
+    if (e instanceof StructuredApiError) throw e;
+    mapGoogleCalendarError(e, { operation: 'freebusy.query (pre-booking)', calendarId: cid });
+  }
+}
+
 // ── booking ──────────────────────────────────────────────────────────────────
 
 export type BookingInput = {
@@ -152,7 +176,6 @@ export type BookingInput = {
   email?: string;
   service: string;
   notes?: string;
-  companyId: string;
   callId: string;
   source?: string;
 };
@@ -167,7 +190,9 @@ export type BookingResult = {
 };
 
 export async function createBooking(input: BookingInput): Promise<BookingResult> {
-  const cid = calendarId();
+  const cid = resolvedCalendarId();
+
+  await assertSlotFreeForBooking(input.slotStart, input.slotEnd);
 
   const summary = `${input.service || 'Appointment'} — ${input.patientName || input.phone}`;
   const descLines = [
@@ -176,47 +201,50 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
     input.email ? `Email: ${input.email}` : null,
     `Service: ${input.service}`,
     input.notes ? `Notes: ${input.notes}` : null,
-    `Company: ${input.companyId}`,
     `Call ID: ${input.callId}`,
     `Source: ${input.source ?? 'voice_agent'}`
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-  const attendees = input.email?.trim()
-    ? [{ email: input.email.trim() }]
-    : undefined;
-
-  const res = await calendar.events.insert({
-    calendarId: cid,
-    requestBody: {
-      summary: summary.slice(0, 100),
-      description: descLines,
-      start: { dateTime: input.slotStart.toISOString(), timeZone: TIMEZONE },
-      end: { dateTime: input.slotEnd.toISOString(), timeZone: TIMEZONE },
-      attendees,
-      extendedProperties: {
-        private: {
-          callId: input.callId,
-          companyId: input.companyId,
-          source: input.source ?? 'voice_agent'
-        }
+  const eventBody: Record<string, unknown> = {
+    summary: summary.slice(0, 100),
+    description: descLines,
+    start: { dateTime: input.slotStart.toISOString(), timeZone: TIMEZONE },
+    end: { dateTime: input.slotEnd.toISOString(), timeZone: TIMEZONE },
+    extendedProperties: {
+      private: {
+        callId: input.callId,
+        source: input.source ?? 'voice_agent'
       }
-    },
-    sendUpdates: 'none'
-  });
-
-  const eventId = res.data.id;
-  if (!eventId) throw new Error('Calendar API returned no event id');
-
-  return {
-    status: 'confirmed',
-    calendarEventId: eventId,
-    calendarId: cid,
-    slotStart: formatSlotIso(input.slotStart),
-    slotEnd: formatSlotIso(input.slotEnd),
-    htmlLink: res.data.htmlLink ?? null
+    }
   };
-}
 
-export function isCalendarConfigured(): boolean {
-  return Boolean(config.googleCalendarId?.trim());
+  const trimmedEmail = input.email?.trim();
+  if (trimmedEmail) {
+    eventBody.attendees = [{ email: trimmedEmail }];
+  }
+
+  try {
+    const res = await calendar.events.insert({
+      calendarId: cid,
+      requestBody: eventBody,
+      sendUpdates: 'none'
+    });
+
+    const eventId = res.data.id;
+    if (!eventId) throw new Error('Calendar API returned no event id');
+
+    return {
+      status: 'confirmed',
+      calendarEventId: eventId,
+      calendarId: cid,
+      slotStart: formatSlotIso(input.slotStart),
+      slotEnd: formatSlotIso(input.slotEnd),
+      htmlLink: res.data.htmlLink ?? null
+    };
+  } catch (e) {
+    if (e instanceof StructuredApiError) throw e;
+    mapGoogleCalendarError(e, { operation: 'events.insert', calendarId: cid });
+  }
 }

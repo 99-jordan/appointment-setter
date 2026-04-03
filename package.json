@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "dev:express": "tsx watch src/server.ts",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:book": "node scripts/test-book-appointment.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -11,7 +11,8 @@ const nextConfig: NextConfig = {
       { source: '/api/intake-flow/', destination: '/api/intake-flow' },
       { source: '/api/services-search/', destination: '/api/services-search' },
       { source: '/api/check-availability/', destination: '/api/check-availability' },
-      { source: '/api/book-appointment/', destination: '/api/book-appointment' }
+      { source: '/api/book-appointment/', destination: '/api/book-appointment' },
+      { source: '/api/book_appointment/', destination: '/api/book_appointment' }
     ];
   },
   webpack: (config) => {

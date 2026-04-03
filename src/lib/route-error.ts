@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { HubspotNotConfiguredError } from '../crm/crm-errors.js';
 import { HttpValidationError } from '../http-validation-error.js';
+import { StructuredApiError } from './api-errors.js';
 
 export function jsonError(error: unknown, defaultStatus: number) {
+  if (error instanceof StructuredApiError) {
+    const body: Record<string, unknown> = {
+      ...(error.details ?? {}),
+      error: error.message,
+      code: error.code
+    };
+    return NextResponse.json(body, { status: error.httpStatus });
+  }
   if (error instanceof ZodError) {
     const fields: Record<string, string> = {};
     for (const iss of error.errors) {
