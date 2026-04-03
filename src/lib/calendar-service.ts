@@ -175,6 +175,7 @@ export type BookingInput = {
   phone: string;
   email?: string;
   service: string;
+  existingPatient?: boolean;
   notes?: string;
   callId: string;
   source?: string;
@@ -200,6 +201,9 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
     `Phone: ${input.phone}`,
     input.email ? `Email: ${input.email}` : null,
     `Service: ${input.service}`,
+    input.existingPatient !== undefined
+      ? `Existing patient: ${input.existingPatient ? 'yes' : 'no'}`
+      : null,
     input.notes ? `Notes: ${input.notes}` : null,
     `Call ID: ${input.callId}`,
     `Source: ${input.source ?? 'voice_agent'}`
@@ -207,28 +211,21 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
     .filter(Boolean)
     .join('\n');
 
-  const eventBody: Record<string, unknown> = {
-    summary: summary.slice(0, 100),
-    description: descLines,
-    start: { dateTime: input.slotStart.toISOString(), timeZone: TIMEZONE },
-    end: { dateTime: input.slotEnd.toISOString(), timeZone: TIMEZONE },
-    extendedProperties: {
-      private: {
-        callId: input.callId,
-        source: input.source ?? 'voice_agent'
-      }
-    }
-  };
-
-  const trimmedEmail = input.email?.trim();
-  if (trimmedEmail) {
-    eventBody.attendees = [{ email: trimmedEmail }];
-  }
-
   try {
     const res = await calendar.events.insert({
       calendarId: cid,
-      requestBody: eventBody,
+      requestBody: {
+        summary: summary.slice(0, 100),
+        description: descLines,
+        start: { dateTime: input.slotStart.toISOString(), timeZone: TIMEZONE },
+        end: { dateTime: input.slotEnd.toISOString(), timeZone: TIMEZONE },
+        extendedProperties: {
+          private: {
+            callId: input.callId,
+            source: input.source ?? 'voice_agent'
+          }
+        }
+      },
       sendUpdates: 'none'
     });
 

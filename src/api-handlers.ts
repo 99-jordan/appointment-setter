@@ -326,7 +326,7 @@ export async function handleBookAppointment(body: unknown) {
   const existingPatient = sanitiseBoolField(raw.existingPatient);
   const consentToSms = sanitiseBoolField(raw.consentToSms);
 
-  // Book the calendar event
+  // Book the calendar event (no attendees — service accounts can't invite guests)
   const booking = await createBooking({
     slotStart: slotStartDate,
     slotEnd: slotEndDate,
@@ -334,11 +334,11 @@ export async function handleBookAppointment(body: unknown) {
     phone: raw.phone,
     email: raw.email?.trim() || undefined,
     service: raw.service?.trim() || 'Appointment',
+    existingPatient,
     notes: [
       raw.notes ?? '',
-      existingPatient !== undefined ? `Existing patient: ${existingPatient ? 'yes' : 'no'}` : '',
       consentToSms !== undefined ? `SMS consent: ${consentToSms ? 'yes' : 'no'}` : ''
-    ].filter(Boolean).join('\n'),
+    ].filter(Boolean).join('\n') || undefined,
     callId
   });
 

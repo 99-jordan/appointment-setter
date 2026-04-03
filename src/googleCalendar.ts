@@ -183,9 +183,6 @@ export async function createServiceAppointmentEvent(
     return null;
   }
 
-  const email = p.email?.trim();
-  const hasGuest = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
-
   const base = {
     summary: buildSummary(p),
     description: buildDescription(p),
@@ -195,8 +192,7 @@ export async function createServiceAppointmentEvent(
         companyId: p.companyId,
         source: p.source
       }
-    },
-    ...(hasGuest ? { attendees: [{ email: email! }] } : {})
+    }
   };
 
   const requestBody =
