@@ -372,3 +372,15 @@ footer {
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+.widget-subhead {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--text);
+}
+
+.convai-widget-wrap {
+  margin-top: 0.75rem;
+  min-height: 4rem;
+}

@@ -1,3 +1,4 @@
+import { ElevenLabsConvaiWidget } from '../components/ElevenLabsConvaiWidget';
 import { HealthStatus } from '../components/HealthStatus';
 
 const ENDPOINTS = [
@@ -119,6 +120,12 @@ export default function HomePage() {
           <code>https://&lt;project&gt;.vercel.app/api/rules-applicable</code>. Set the same secret in Vercel
           and in the ElevenLabs tool header <code>x-elevenlabs-secret-dentalpro</code>.
         </p>
+        <h3 className="widget-subhead">Test agent (ConvAI widget)</h3>
+        <p className="note" style={{ marginTop: 0 }}>
+          The widget loads here so you can try the agent against this deployment. Override the agent id with{' '}
+          <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code> in Vercel or local <code>.env</code> if needed.
+        </p>
+        <ElevenLabsConvaiWidget />
       </section>
 
       <footer>
