@@ -9,9 +9,26 @@ import type {
   UpsertContactSuccessResponse,
 } from '../../../../lib/hubspot/types.js';
 
+/**
+ * Reads at runtime via bracket notation so Next.js does not inline a stale
+ * value from `next build` (common cause of "always skipped" on Vercel).
+ */
 function isSyncEnabled(): boolean {
-  const v = (process.env.HUBSPOT_SYNC_ENABLED ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
+  const raw = process.env['HUBSPOT_SYNC_ENABLED'];
+  if (raw === undefined) return false;
+  const v = raw
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .trim()
+    .toLowerCase();
+  if (v === '') return false;
+  return (
+    v === '1' ||
+    v === 'true' ||
+    v === 'yes' ||
+    v === 'on' ||
+    v === 'enabled'
+  );
 }
 
 function errorResponse(
@@ -49,6 +66,12 @@ export async function POST(req: NextRequest) {
     }
     return errorResponse('validation_error', 'Request validation failed', 400);
   }
+
+  console.log(
+    '[hubspot/upsert-contact] sync toggle debug: HUBSPOT_SYNC_ENABLED=%s hasAccessToken=%s',
+    JSON.stringify(process.env['HUBSPOT_SYNC_ENABLED']),
+    String(Boolean(process.env['HUBSPOT_ACCESS_TOKEN']?.trim()))
+  );
 
   if (!isSyncEnabled()) {
     return NextResponse.json({
