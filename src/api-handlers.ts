@@ -18,10 +18,12 @@ import {
   sendSmsCanonicalSchema
 } from './logic.js';
 import {
+  asRecord,
   generateCallId,
   normalizeEscalateHumanInput,
   normalizeLogCallInput,
-  normalizeSendSmsInput
+  normalizeSendSmsInput,
+  pickStr
 } from './tool-payload-normalize.js';
 import { parseCanonical } from './tool-validation.js';
 import { resolveSlot, parseIsoSlot, TIMEZONE } from './lib/date-parse.js';
@@ -97,6 +99,19 @@ export async function handleRulesApplicable(body: unknown) {
   return buildRulesApplicable(data, body);
 }
 
+/** When `templateVars` is sent, it must be a plain object (metadata only; not merged into `body`). */
+function readOptionalTemplateVars(r: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!Object.prototype.hasOwnProperty.call(r, 'templateVars')) return undefined;
+  const raw = r['templateVars'];
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new HttpValidationError({
+      templateVars: 'When provided, must be a plain object.'
+    });
+  }
+  return raw as Record<string, unknown>;
+}
+
 export async function handleSendSms(body: unknown) {
   if (!isTwilioConfigured()) {
     const err = new Error(
@@ -104,6 +119,39 @@ export async function handleSendSms(body: unknown) {
     );
     (err as Error & { statusCode?: number }).statusCode = 503;
     throw err;
+  }
+
+  const r = asRecord(body);
+  if (Object.prototype.hasOwnProperty.call(r, 'body')) {
+    const rawBody = r['body'];
+    if (rawBody === null || rawBody === undefined) {
+      throw new HttpValidationError({
+        body: 'Required: a non-empty string (use templateId / messageType when not sending a literal body).'
+      });
+    }
+    if (typeof rawBody !== 'string') {
+      throw new HttpValidationError({ body: 'Must be a string.' });
+    }
+    const bodyText = rawBody.trim();
+    if (bodyText.length === 0) {
+      throw new HttpValidationError({ body: 'Must not be empty.' });
+    }
+    const to = pickStr(r, 'to', 'phone');
+    if (!to || to.trim().length < 5) {
+      throw new HttpValidationError({
+        to: 'Required (to or phone); minimum 5 characters.'
+      });
+    }
+    const templateVars = readOptionalTemplateVars(r);
+    const purpose = pickStr(r, 'purpose');
+    const { messageSid } = await sendSmsViaTwilio(to.trim(), bodyText);
+    return {
+      ok: true as const,
+      messageSid,
+      bodyLength: bodyText.length,
+      ...(purpose !== undefined ? { purpose } : {}),
+      ...(templateVars !== undefined ? { templateVarsReceived: true } : {})
+    };
   }
 
   const data = await loadSheetData();
