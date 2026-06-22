@@ -112,6 +112,20 @@ export async function loadSheetData(): Promise<SheetData> {
 }
 
 
+/** Prevent Sheets from coercing phone/postcode strings into numbers (drops leading 0). */
+function sheetTextCell(value: string): string {
+  const s = String(value ?? '').trim();
+  if (!s) return s;
+  // Leading apostrophe forces text when the tab uses USER_ENTERED-style parsing.
+  if (/^[\d+]/.test(s)) return `'${s}`;
+  return s;
+}
+
+function preserveCallLogTextCells(row: string[], layout: 'full' | 'legacy'): string[] {
+  const phoneIdx = layout === 'legacy' ? 6 : 7;
+  return row.map((cell, i) => (i === phoneIdx ? sheetTextCell(cell) : cell));
+}
+
 export async function appendCallLog(
   row: string[],
   layout: 'full' | 'legacy' = 'full'
@@ -119,8 +133,8 @@ export async function appendCallLog(
   await sheets.spreadsheets.values.append({
     spreadsheetId: config.googleSheetId,
     range: layout === 'legacy' ? 'CallLogs!A:M' : 'CallLogs!A:N',
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [row] }
+    valueInputOption: 'RAW',
+    requestBody: { values: [preserveCallLogTextCells(row, layout)] }
   });
 }
 
