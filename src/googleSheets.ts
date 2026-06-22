@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { config } from './config.js';
+import { normalizeUkPhone } from './tool-payload-normalize.js';
 import type { SheetData } from './types.js';
 
 const auth = new google.auth.JWT({
@@ -112,13 +113,22 @@ export async function loadSheetData(): Promise<SheetData> {
 }
 
 
-/** Prevent Sheets from coercing phone/postcode strings into numbers (drops leading 0). */
+/** Prevent Sheets from coercing phone strings into numbers (drops leading 0). */
 function sheetTextCell(value: string): string {
   const s = String(value ?? '').trim();
   if (!s) return s;
-  // Leading apostrophe forces text when the tab uses USER_ENTERED-style parsing.
+  if (s.startsWith("'")) return s;
   if (/^[\d+]/.test(s)) return `'${s}`;
   return s;
+}
+
+function sheetCellToText(value: string): string {
+  const s = String(value ?? '').trim();
+  return s.startsWith("'") ? s.slice(1) : s;
+}
+
+function callLogPhoneFromCell(value: string): string {
+  return normalizeUkPhone(sheetCellToText(value));
 }
 
 function preserveCallLogTextCells(row: string[], layout: 'full' | 'legacy'): string[] {
@@ -133,7 +143,7 @@ export async function appendCallLog(
   await sheets.spreadsheets.values.append({
     spreadsheetId: config.googleSheetId,
     range: layout === 'legacy' ? 'CallLogs!A:M' : 'CallLogs!A:N',
-    valueInputOption: 'RAW',
+    valueInputOption: 'USER_ENTERED',
     requestBody: { values: [preserveCallLogTextCells(row, layout)] }
   });
 }
@@ -188,7 +198,7 @@ function headerRowToCallLog(
     priority: get('priority'),
     emergency_flag: get('emergency_flag'),
     name: get('name'),
-    phone: get('phone'),
+    phone: callLogPhoneFromCell(get('phone')),
     postcode: get('postcode'),
     issue_summary: get('issue_summary'),
     action_taken: get('action_taken'),
@@ -208,7 +218,7 @@ function positionalRowToCallLog(row: string[]): import('./types.js').CallLogRow 
     priority: get(4),
     emergency_flag: get(5),
     name: get(6),
-    phone: get(7),
+    phone: callLogPhoneFromCell(get(7)),
     postcode: get(8),
     issue_summary: get(9),
     action_taken: get(10),

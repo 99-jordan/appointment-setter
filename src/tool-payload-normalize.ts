@@ -28,6 +28,35 @@ export function pickStr(r: Record<string, unknown>, ...keys: string[]): string |
   return undefined;
 }
 
+/** UK mobiles often arrive as 7xxxxxxxxx or JSON numbers — restore leading 0 for storage/display. */
+export function normalizeUkPhone(phone: unknown): string {
+  if (phone === null || phone === undefined) return '';
+  let s =
+    typeof phone === 'number' && Number.isFinite(phone)
+      ? String(Math.trunc(phone))
+      : String(phone).trim();
+  if (!s) return '';
+
+  s = s.replace(/[\s()-]/g, '');
+  if (s.startsWith('+44')) s = `0${s.slice(3)}`;
+  else if (/^44\d{10}$/.test(s)) s = `0${s.slice(2)}`;
+
+  if (/^7\d{9}$/.test(s)) s = `0${s}`;
+
+  return s;
+}
+
+function pickPhone(r: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    if (!(k in r)) continue;
+    const raw = r[k];
+    if (raw === null || raw === undefined) continue;
+    const normalized = normalizeUkPhone(raw);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
 /** Maps agent-facing messageType to sheet template_id (SMS tab). */
 export const MESSAGE_TYPE_TO_TEMPLATE_ID: Record<string, string> = {
   emergency_confirmation: 'SMS01',
@@ -139,7 +168,7 @@ export function normalizeLogCallInput(raw: unknown): Record<string, unknown> {
     priority: pickStr(r, 'priority') ?? 'P3',
     emergencyFlag,
     name: pickStr(r, 'name', 'capturedName') ?? '',
-    phone: pickStr(r, 'phone', 'callerPhone', 'capturedPhone') ?? '',
+    phone: pickPhone(r, 'phone', 'callerPhone', 'capturedPhone'),
     postcode: pickStr(r, 'postcode') ?? '',
     issueSummary: buildLogCallIssueSummary(r),
     actionTaken: buildLogCallActionTaken(r),
