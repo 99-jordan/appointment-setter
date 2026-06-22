@@ -88,28 +88,64 @@ export function normalizeSendSmsInput(raw: unknown): Record<string, unknown> {
   };
 }
 
+function buildLogCallIssueSummary(r: Record<string, unknown>): string | undefined {
+  const direct = pickStr(r, 'issueSummary', 'conversationSummary');
+  if (direct) return direct;
+
+  const intent = pickStr(r, 'intent');
+  const service = pickStr(r, 'capturedService');
+  const notes = pickStr(r, 'notes');
+  const parts = [intent, service, notes].filter(Boolean);
+  return parts.length > 0 ? parts.join(' — ') : undefined;
+}
+
+function buildLogCallActionTaken(r: Record<string, unknown>): string | undefined {
+  const direct = pickStr(r, 'actionTaken');
+  if (direct) return direct;
+
+  const parts: string[] = [];
+  const service = pickStr(r, 'capturedService');
+  const date = pickStr(r, 'desiredDate');
+  const time = pickStr(r, 'desiredTime');
+  const email = pickStr(r, 'capturedEmail');
+  const existing = pickStr(r, 'existingPatient');
+  const notes = pickStr(r, 'notes');
+
+  if (service) parts.push(`Service: ${service}`);
+  if (date || time) parts.push(`Preferred slot: ${[date, time].filter(Boolean).join(' ')}`);
+  if (email) parts.push(`Email: ${email}`);
+  if (existing) parts.push(`Existing patient: ${existing}`);
+  if (notes) parts.push(`Notes: ${notes}`);
+
+  return parts.length > 0 ? parts.join('. ') : 'Intake captured at end of call';
+}
+
 export function normalizeLogCallInput(raw: unknown): Record<string, unknown> {
   const r = asRecord(raw);
   let callId = pickStr(r, 'callId');
   if (!callId) callId = generateCallId();
 
   const ef = pickStr(r, 'emergencyFlag');
-  const emergencyFlag = ef === 'Yes' ? 'Yes' : 'No';
+  const intent = pickStr(r, 'intent') ?? 'dental_enquiry';
+  const emergencyFlag =
+    ef === 'Yes' || /emergency/i.test(intent) || /emergency/i.test(pickStr(r, 'notes') ?? '')
+      ? 'Yes'
+      : 'No';
 
   return {
     companyId: pickStr(r, 'companyId'),
     callId,
-    intent: pickStr(r, 'intent') ?? 'dental_enquiry',
+    intent,
     priority: pickStr(r, 'priority') ?? 'P3',
     emergencyFlag,
-    name: pickStr(r, 'name') ?? '',
-    phone: pickStr(r, 'phone', 'callerPhone') ?? '',
+    name: pickStr(r, 'name', 'capturedName') ?? '',
+    phone: pickStr(r, 'phone', 'callerPhone', 'capturedPhone') ?? '',
     postcode: pickStr(r, 'postcode') ?? '',
-    issueSummary: pickStr(r, 'issueSummary'),
-    actionTaken: pickStr(r, 'actionTaken'),
+    issueSummary: buildLogCallIssueSummary(r),
+    actionTaken: buildLogCallActionTaken(r),
     smsSent: pickStr(r, 'smsSent'),
     escalatedTo: pickStr(r, 'escalatedTo'),
-    status: pickStr(r, 'status')
+    status: pickStr(r, 'status') ?? 'open'
   };
 }
 

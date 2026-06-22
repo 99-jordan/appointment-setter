@@ -5,7 +5,7 @@ import {
   matchesCompanyRow,
   matchesCallLogCompanyRow
 } from './clinic-default.js';
-import { appendAppointmentRow, appendCallLog, loadSheetData, readCallLogs } from './googleSheets.js';
+import { appendAppointmentRow, appendCallLog, getCallLogAppendLayout, loadSheetData, readCallLogs } from './googleSheets.js';
 import { config } from './config.js';
 import type { EmergencyCallPayload } from './crm/hubspot-types.js';
 import { postEscalationWebhook } from './escalation.js';
@@ -255,24 +255,42 @@ export async function handleLogCall(body: unknown) {
   const data = await loadSheetData();
   const normalized = mergeDefaultCompanyId(data, normalizeLogCallInput(body));
   const parsed = parseCanonical(logCallCanonicalSchema, normalized);
-  const row: string[] = [
-    new Date().toISOString(),
-    parsed.companyId,
-    parsed.callId,
-    parsed.intent ?? 'dental_enquiry',
-    parsed.priority ?? 'P3',
-    parsed.emergencyFlag,
-    parsed.name ?? '',
-    parsed.phone ?? '',
-    parsed.postcode ?? '',
-    parsed.issueSummary,
-    parsed.actionTaken,
-    parsed.smsSent ?? '',
-    parsed.escalatedTo ?? '',
-    parsed.status
-  ];
+  const layout = await getCallLogAppendLayout();
+  const row: string[] =
+    layout === 'legacy'
+      ? [
+          new Date().toISOString(),
+          parsed.callId,
+          parsed.intent ?? 'dental_enquiry',
+          parsed.priority ?? 'P3',
+          parsed.emergencyFlag,
+          parsed.name ?? '',
+          parsed.phone ?? '',
+          parsed.postcode ?? '',
+          parsed.issueSummary,
+          parsed.actionTaken,
+          parsed.smsSent ?? '',
+          parsed.escalatedTo ?? '',
+          parsed.status
+        ]
+      : [
+          new Date().toISOString(),
+          parsed.companyId,
+          parsed.callId,
+          parsed.intent ?? 'dental_enquiry',
+          parsed.priority ?? 'P3',
+          parsed.emergencyFlag,
+          parsed.name ?? '',
+          parsed.phone ?? '',
+          parsed.postcode ?? '',
+          parsed.issueSummary,
+          parsed.actionTaken,
+          parsed.smsSent ?? '',
+          parsed.escalatedTo ?? '',
+          parsed.status
+        ];
 
-  await appendCallLog(row);
+  await appendCallLog(row, layout);
   return { ok: true, callId: parsed.callId };
 }
 

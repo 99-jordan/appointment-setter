@@ -112,13 +112,23 @@ export async function loadSheetData(): Promise<SheetData> {
 }
 
 
-export async function appendCallLog(row: string[]): Promise<void> {
+export async function appendCallLog(
+  row: string[],
+  layout: 'full' | 'legacy' = 'full'
+): Promise<void> {
   await sheets.spreadsheets.values.append({
     spreadsheetId: config.googleSheetId,
-    range: 'CallLogs!A:N',
+    range: layout === 'legacy' ? 'CallLogs!A:M' : 'CallLogs!A:N',
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] }
   });
+}
+
+/** Match append column order to the CallLogs header row (legacy sheets omit company_id). */
+export async function getCallLogAppendLayout(): Promise<'full' | 'legacy'> {
+  const rows = await readTabOptional('CallLogs');
+  if (!rows.length) return 'full';
+  return parseCallLogHeader(rows[0]).mode === 'legacy_header' ? 'legacy' : 'full';
 }
 
 /** Positional columns for CallLogs (matches append order in handleLogCall). */
