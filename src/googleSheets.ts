@@ -121,6 +121,51 @@ export async function appendCallLog(row: string[]): Promise<void> {
   });
 }
 
+/** Positional columns for CallLogs (matches append order in handleLogCall). */
+
+function rowLooksLikeCallLogHeader(row: string[]): boolean {
+  const a = String(row[0] ?? '').trim().toLowerCase();
+  const c = String(row[2] ?? '').trim().toLowerCase();
+  return a === 'timestamp' || c === 'call_id';
+}
+
+function positionalRowToCallLog(row: string[]): import('./types.js').CallLogRow {
+  const get = (i: number) => String(row[i] ?? '').trim();
+  return {
+    timestamp: get(0),
+    company_id: get(1),
+    call_id: get(2),
+    intent: get(3),
+    priority: get(4),
+    emergency_flag: get(5),
+    name: get(6),
+    phone: get(7),
+    postcode: get(8),
+    issue_summary: get(9),
+    action_taken: get(10),
+    sms_sent: get(11),
+    escalated_to: get(12),
+    status: get(13)
+  };
+}
+
+/** Read all rows from the active sheet CallLogs tab. */
+export async function readCallLogs(): Promise<import('./types.js').CallLogRow[]> {
+  const rows = await readTabOptional('CallLogs');
+  if (!rows.length) return [];
+
+  const start = rowLooksLikeCallLogHeader(rows[0]) ? 1 : 0;
+  const out: import('./types.js').CallLogRow[] = [];
+
+  for (let i = start; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!row.some((cell) => String(cell ?? '').trim() !== '')) continue;
+    out.push(positionalRowToCallLog(row));
+  }
+
+  return out;
+}
+
 const APPOINTMENTS_TAB = 'Appointments';
 const APPOINTMENTS_HEADER = [
   'timestamp',

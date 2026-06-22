@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { getDefaultCompanyId, mergeDefaultCompanyId } from './clinic-default.js';
-import { appendAppointmentRow, appendCallLog, loadSheetData } from './googleSheets.js';
+import { getDefaultCompanyId, mergeDefaultCompanyId, matchesCompanyRow } from './clinic-default.js';
+import { appendAppointmentRow, appendCallLog, loadSheetData, readCallLogs } from './googleSheets.js';
 import { config } from './config.js';
 import type { EmergencyCallPayload } from './crm/hubspot-types.js';
 import { postEscalationWebhook } from './escalation.js';
@@ -29,6 +29,12 @@ import { parseCanonical } from './tool-validation.js';
 import { resolveSlot, parseIsoSlot, TIMEZONE } from './lib/date-parse.js';
 import { checkAvailability, createBooking } from './lib/calendar-service.js';
 import { HttpValidationError } from './http-validation-error.js';
+import {
+  callLogRowToInboxCall,
+  sortCallsNewestFirst,
+  type InboxCall
+} from './lib/inbox-calls.js';
+import { StructuredApiError } from './lib/api-errors.js';
 
 const crmSyncPayloadSchema = z.object({
   companyId: z.string().optional(),
@@ -263,6 +269,47 @@ export async function handleLogCall(body: unknown) {
 
   await appendCallLog(row);
   return { ok: true, callId: parsed.callId };
+}
+
+export async function handleInboxCallsList(opts?: {
+  companyId?: string;
+  limit?: number;
+  callId?: string;
+}): Promise<{ ok: true; calls: InboxCall[] }> {
+  const data = await loadSheetData();
+  const resolvedCompanyId = opts?.companyId?.trim() || getDefaultCompanyId(data);
+  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
+
+  const rows = await readCallLogs();
+  const filtered = rows.filter((r) => matchesCompanyRow(r.company_id, resolvedCompanyId));
+  let calls = sortCallsNewestFirst(filtered.map(callLogRowToInboxCall));
+
+  if (opts?.callId?.trim()) {
+    const id = opts.callId.trim();
+    calls = calls.filter((c) => c.callId === id);
+  }
+
+  return { ok: true, calls: calls.slice(0, limit) };
+}
+
+export async function handleInboxCallById(
+  callId: string,
+  companyId?: string
+): Promise<{ ok: true; call: InboxCall }> {
+  const { calls } = await handleInboxCallsList({
+    companyId,
+    callId: callId.trim(),
+    limit: 1
+  });
+  const call = calls[0];
+  if (!call) {
+    throw new StructuredApiError({
+      message: 'Call not found',
+      code: 'not_found',
+      httpStatus: 404
+    });
+  }
+  return { ok: true, call };
 }
 
 // ── check-availability ───────────────────────────────────────────────────────
