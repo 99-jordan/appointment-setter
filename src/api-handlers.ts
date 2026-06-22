@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { getDefaultCompanyId, mergeDefaultCompanyId, matchesCompanyRow } from './clinic-default.js';
+import {
+  getDefaultCompanyId,
+  mergeDefaultCompanyId,
+  matchesCompanyRow,
+  matchesCallLogCompanyRow
+} from './clinic-default.js';
 import { appendAppointmentRow, appendCallLog, loadSheetData, readCallLogs } from './googleSheets.js';
 import { config } from './config.js';
 import type { EmergencyCallPayload } from './crm/hubspot-types.js';
@@ -281,7 +286,9 @@ export async function handleInboxCallsList(opts?: {
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
 
   const rows = await readCallLogs();
-  const filtered = rows.filter((r) => matchesCompanyRow(r.company_id, resolvedCompanyId));
+  const filtered = rows.filter((r) =>
+    matchesCallLogCompanyRow(r.company_id, resolvedCompanyId, opts?.companyId)
+  );
   let calls = sortCallsNewestFirst(filtered.map(callLogRowToInboxCall));
 
   if (opts?.callId?.trim()) {

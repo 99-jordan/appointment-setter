@@ -14,6 +14,17 @@ export function matchesCompanyRow(rowCompanyId: string | undefined, resolvedComp
   return false;
 }
 
+/** CallLogs rows written before the company_id column was added (blank B). */
+export function matchesCallLogCompanyRow(
+  rowCompanyId: string | undefined,
+  resolvedCompanyId: string,
+  explicitCompanyFilter?: string
+): boolean {
+  const cid = String(rowCompanyId ?? '').trim();
+  if (cid === '' && !explicitCompanyFilter?.trim()) return true;
+  return matchesCompanyRow(rowCompanyId, resolvedCompanyId);
+}
+
 /**
  * Single-clinic mode: prefer the first Company row with a non-empty `company_id`.
  * If none, use {@link SINGLE_CLINIC_COMPANY_ID} when at least one data row exists (company_id column optional).

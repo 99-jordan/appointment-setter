@@ -123,10 +123,55 @@ export async function appendCallLog(row: string[]): Promise<void> {
 
 /** Positional columns for CallLogs (matches append order in handleLogCall). */
 
-function rowLooksLikeCallLogHeader(row: string[]): boolean {
-  const a = String(row[0] ?? '').trim().toLowerCase();
-  const c = String(row[2] ?? '').trim().toLowerCase();
-  return a === 'timestamp' || c === 'call_id';
+function normalizeCallLogHeaderKey(h: string): string {
+  return String(h ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+function parseCallLogHeader(row: string[]): {
+  mode: 'header' | 'legacy_header' | 'none';
+  indexByKey?: Map<string, number>;
+} {
+  const keys = row.map(normalizeCallLogHeaderKey);
+  if ((keys[0] ?? '') !== 'timestamp' || !keys.includes('call_id')) {
+    return { mode: 'none' };
+  }
+
+  const indexByKey = new Map<string, number>();
+  keys.forEach((k, i) => {
+    if (k) indexByKey.set(k, i);
+  });
+
+  return { mode: indexByKey.has('company_id') ? 'header' : 'legacy_header', indexByKey };
+}
+
+function headerRowToCallLog(
+  row: string[],
+  indexByKey: Map<string, number>
+): import('./types.js').CallLogRow {
+  const get = (key: string) => {
+    const idx = indexByKey.get(key);
+    if (idx === undefined) return '';
+    return String(row[idx] ?? '').trim();
+  };
+  return {
+    timestamp: get('timestamp'),
+    company_id: get('company_id'),
+    call_id: get('call_id'),
+    intent: get('intent'),
+    priority: get('priority'),
+    emergency_flag: get('emergency_flag'),
+    name: get('name'),
+    phone: get('phone'),
+    postcode: get('postcode'),
+    issue_summary: get('issue_summary'),
+    action_taken: get('action_taken'),
+    sms_sent: get('sms_sent'),
+    escalated_to: get('escalated_to'),
+    status: get('status')
+  };
 }
 
 function positionalRowToCallLog(row: string[]): import('./types.js').CallLogRow {
@@ -154,13 +199,18 @@ export async function readCallLogs(): Promise<import('./types.js').CallLogRow[]>
   const rows = await readTabOptional('CallLogs');
   if (!rows.length) return [];
 
-  const start = rowLooksLikeCallLogHeader(rows[0]) ? 1 : 0;
+  const headerParse = parseCallLogHeader(rows[0]);
+  const start = headerParse.mode !== 'none' ? 1 : 0;
   const out: import('./types.js').CallLogRow[] = [];
 
   for (let i = start; i < rows.length; i += 1) {
     const row = rows[i];
     if (!row.some((cell) => String(cell ?? '').trim() !== '')) continue;
-    out.push(positionalRowToCallLog(row));
+    if (headerParse.indexByKey) {
+      out.push(headerRowToCallLog(row, headerParse.indexByKey));
+    } else {
+      out.push(positionalRowToCallLog(row));
+    }
   }
 
   return out;
